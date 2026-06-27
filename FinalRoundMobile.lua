@@ -154,7 +154,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "VehicleSeat", "DriveSeat", "Body"}
+local ValidTargetParts = {"Head", "HumanoidRootPart"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -446,42 +446,32 @@ local function getClosestPlayer(config)
             continue
         end
 
-        local targetPartName
-        if targetPartOption == "Random" then
-            targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
-        else
-            targetPartName = targetPartOption
+        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+        if not OnScreen then
+            continue
         end
 
-        local candidatePart = Character:FindFirstChild(targetPartName) or Character:FindFirstChild("HumanoidRootPart")
-        if not candidatePart and Character:FindFirstChildOfClass("Humanoid") then
-            local seat = Character:FindFirstChildOfClass("Humanoid").SeatPart
-            if seat then
-                if targetPartName == "VehicleSeat" or targetPartName == "DriveSeat" then
-                    if seat:IsA(targetPartName) then
-                        candidatePart = seat
-                    end
-                elseif targetPartName == "Body" then
-                    candidatePart = seat.Parent:FindFirstChild("Body") or seat
-                end
+        local Distance = (originPosition - ScreenPosition).Magnitude
+        if Distance <= (DistanceToMouse or radiusOption) then
+            local targetPartName
+            if targetPartOption == "Random" then
+                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
+            else
+                targetPartName = targetPartOption
             end
-        end
 
-        if candidatePart then
-            local ScreenPosition, OnScreen = getPositionOnScreen(candidatePart.Position)
-            if OnScreen then
-                local Distance = (originPosition - ScreenPosition).Magnitude
-                if Distance <= (DistanceToMouse or radiusOption) then
-                    ClosestPart = candidatePart
-                    ClosestPlayer = Player
-                    DistanceToMouse = Distance
-                end
+            local candidatePart = Character[targetPartName]
+            if candidatePart then
+                ClosestPart = candidatePart
+                ClosestPlayer = Player
+                DistanceToMouse = Distance
             end
         end
     end
 
     return ClosestPart, ClosestPlayer
 end
+
 local function getBodyPart(character, part)
     return character:FindFirstChild(part) and part or "Head"
 end
@@ -1000,7 +990,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "VehicleSeat", "DriveSeat", "Body", "Random"}
+    Values = {"Head", "HumanoidRootPart", "Random"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
