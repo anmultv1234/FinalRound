@@ -1,7 +1,7 @@
 local UIS = game:GetService("UserInputService")
 if UIS.TouchEnabled and not UIS.MouseEnabled and not UIS.KeyboardEnabled then
-    getgenv().bypass_adonis = true
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/PasteWareV2LegacyMobile.lua'))() return
+    getgenv().bypass_adonis = true 
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/FinalRoundMobile.lua"))() return
 end
 
 if not game:IsLoaded() then
