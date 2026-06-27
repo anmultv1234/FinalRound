@@ -17,24 +17,34 @@ if bypass_adonis then
             if typeof(v) == "table" then
                 local a = rawget(v, "Detected")
                 local b = rawget(v, "Kill")
+
                 if typeof(a) == "function" and not x then
                     x = a
                     local o; o = hookfunction(x, function(c, f, n)
-                        if c ~= "_" then if d then end end
+                        if c ~= "_" then
+                            if d then
+                            end
+                        end
                         return true
                     end)
                     table.insert(h, x)
                 end
+
                 if rawget(v, "Variables") and rawget(v, "Process") and typeof(b) == "function" and not y then
                     y = b
-                    local o; o = hookfunction(y, function(f) if d then end end)
+                    local o; o = hookfunction(y, function(f)
+                        if d then
+                        end
+                    end)
                     table.insert(h, y)
                 end
             end
         end
         local o; o = hookfunction(getrenv().debug.info, newcclosure(function(...)
             local a, f = ...
-            if x and a == x then return coroutine.yield(coroutine.running()) end
+            if x and a == x then
+                return coroutine.yield(coroutine.running())
+            end
             return o(...)
         end))
         setthreadidentity(7)
@@ -43,10 +53,10 @@ end
 
 if not getgenv().ScriptState then
     getgenv().ScriptState = {
+        masterAimLock = false,
         isLockedOn = false,
         targetPlayer = nil,
         lockEnabled = false,
-        aimLockEnabled = false,
         aimLockKeyMode = "Toggle",
         aimLockVisibleCheck = false,
         aimLockAliveCheck = false,
@@ -138,7 +148,6 @@ local FindFirstChild = game.FindFirstChild
 local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
-
 local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
 local PredictionAmount = 0.165
 
@@ -153,12 +162,30 @@ fov_circle.Transparency = 1
 fov_circle.Color = Color3.fromRGB(54, 57, 241)
 
 local ExpectedArguments = {
-    ViewportPointToRay = { ArgCountRequired = 2, Args = { "number", "number" } },
-    ScreenPointToRay = { ArgCountRequired = 2, Args = { "number", "number" } },
-    Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
-    FindPartOnRay = { ArgCountRequired = 2, Args = { "Ray", "Instance?", "boolean?", "boolean?" } },
-    FindPartOnRayWithIgnoreList = { ArgCountRequired = 2, Args = { "Ray", "table", "boolean?", "boolean?" } },
-    FindPartOnRayWithWhitelist = { ArgCountRequired = 2, Args = { "Ray", "table", "boolean?" } }
+    ViewportPointToRay = {
+        ArgCountRequired = 2,
+        Args = { "number", "number" }
+    },
+    ScreenPointToRay = {
+        ArgCountRequired = 2,
+        Args = { "number", "number" }
+    },
+    Raycast = {
+        ArgCountRequired = 3,
+        Args = { "Instance", "Vector3", "Vector3", "RaycastParams" }
+    },
+    FindPartOnRay = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "Instance?", "boolean?", "boolean?" }
+    },
+    FindPartOnRayWithIgnoreList = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "table", "boolean?", "boolean?" }
+    },
+    FindPartOnRayWithWhitelist = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "table", "boolean?" }
+    }
 }
 
 function CalculateChance(Percentage)
@@ -174,20 +201,33 @@ end
 
 local function ValidateArguments(Args, RayMethod)
     local Matches = 0
-    if #Args < RayMethod.ArgCountRequired then return false end
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
     for Pos, Argument in next, Args do
         local Expected = RayMethod.Args[Pos]
-        if not Expected then break end
+        if not Expected then
+            break
+        end
         local IsOptional = Expected:sub(-1) == "?"
         local BaseType = IsOptional and Expected:sub(1, -2) or Expected
-        if typeof(Argument) == BaseType then Matches = Matches + 1
-        elseif IsOptional and Argument == nil then Matches = Matches + 1 end
+        if typeof(Argument) == BaseType then
+            Matches = Matches + 1
+        elseif IsOptional and Argument == nil then
+            Matches = Matches + 1
+        end
     end
     return Matches >= RayMethod.ArgCountRequired
 end
 
-local function getDirection(Origin, Position) return (Position - Origin).Unit end
-local function getMousePosition() return GetMouseLocation(UserInputService) end
+local function getDirection(Origin, Position)
+    return (Position - Origin).Unit
+end
+
+local function getMousePosition()
+    return GetMouseLocation(UserInputService)
+end
+
 local function getFovOrigin()
     if ScriptState.fovMode == "Center" then
         local viewportSize = Camera.ViewportSize
@@ -196,41 +236,103 @@ local function getFovOrigin()
     return getMousePosition()
 end
 
+local function getTeamComparisonOption()
+    local esp = rawget(getgenv(), "ExunysDeveloperESP")
+    if esp and esp.DeveloperSettings and esp.DeveloperSettings.TeamCheckOption then
+        return esp.DeveloperSettings.TeamCheckOption
+    end
+end
+
+local function playersOnSameTeam(player)
+    if not player then
+        return false
+    end
+    local option = getTeamComparisonOption()
+    if option then
+        local okLocal, localValue = pcall(function()
+            return LocalPlayer[option]
+        end)
+        local okTarget, targetValue = pcall(function()
+            return player[option]
+        end)
+        if okLocal and okTarget and localValue ~= nil and targetValue ~= nil then
+            return targetValue == localValue
+        end
+    end
+    local okLocalTeam, localTeam = pcall(function()
+        return LocalPlayer.Team
+    end)
+    local okTargetTeam, targetTeam = pcall(function()
+        return player.Team
+    end)
+    if okLocalTeam and okTargetTeam and localTeam and targetTeam then
+        return targetTeam == localTeam
+    end
+    local okLocalColor, localColor = pcall(function()
+        return LocalPlayer.TeamColor
+    end)
+    local okTargetColor, targetColor = pcall(function()
+        return player.TeamColor
+    end)
+    if okLocalColor and okTargetColor and localColor and targetColor then
+        return targetColor == localColor
+    end
+    return false
+end
+
 local function IsPlayerVisible(Player)
     local PlayerCharacter = Player and Player.Character
     local LocalPlayerCharacter = LocalPlayer.Character
-    if not (PlayerCharacter and LocalPlayerCharacter) then return false end
-    local targetPartOption = SilentAimSettings.TargetPart or "HumanoidRootPart"
+    if not (PlayerCharacter and LocalPlayerCharacter) then
+        return false
+    end
+    local targetPartOption = (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart or "HumanoidRootPart"
     local PlayerRoot = FindFirstChild(PlayerCharacter, targetPartOption) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
-    if not PlayerRoot then return false end
+    if not PlayerRoot then
+        return false
+    end
     local CastPoints, IgnoreList = { PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter }, { LocalPlayerCharacter, PlayerCharacter }
     local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
     return ObscuringObjects == 0
 end
 
 local function normalizeSelection(selection)
-    if not selection then return {} end
+    if not selection then
+        return {}
+    end
     local normalized = {}
     if type(selection) ~= "table" then
         normalized[selection] = true
         return normalized
     end
     local hasNumericKeys = false
-    for key in pairs(selection) do if type(key) == "number" then hasNumericKeys = true break end end
+    for key in pairs(selection) do
+        if type(key) == "number" then
+            hasNumericKeys = true
+            break
+        end
+    end
     if hasNumericKeys then
-        for _, value in ipairs(selection) do normalized[value] = true end
+        for _, value in ipairs(selection) do
+            normalized[value] = true
+        end
     else
         for key, value in pairs(selection) do
             if type(key) == "string" then
-                if value == true then normalized[key] = true
-                elseif type(value) == "string" then normalized[value] = true end
+                if value == true then
+                    normalized[key] = true
+                elseif type(value) == "string" then
+                    normalized[value] = true
+                end
             end
         end
     end
     return normalized
 end
 
-local function isSelectionActive(selection, option) return selection and selection[option] or false end
+local function isSelectionActive(selection, option)
+    return selection and selection[option] or false
+end
 
 SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedMethods)
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
@@ -238,32 +340,76 @@ SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
 local function getClosestPlayer(config)
     config = config or {}
-    local targetPartOption = config.targetPart or SilentAimSettings.TargetPart
-    if not targetPartOption then return nil, nil end
-    local radiusOption = config.radius or SilentAimSettings.FOVRadius or 2000
+    local targetPartOption = config.targetPart or (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart
+    if not targetPartOption then
+        return nil, nil
+    end
+    local ignoredPlayers = config.ignoredPlayers or (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value)
+    local radiusOption = config.radius or (Options and Options.Radius and Options.Radius.Value) or SilentAimSettings.FOVRadius or 2000
     local visibleCheck = config.visibleCheck
-    if visibleCheck == nil then visibleCheck = SilentAimSettings.VisibleCheck end
+    if visibleCheck == nil then
+        visibleCheck = SilentAimSettings.VisibleCheck
+    end
     local aliveCheck = config.aliveCheck
-    if aliveCheck == nil then aliveCheck = SilentAimSettings.AliveCheck end
+    if aliveCheck == nil then
+        aliveCheck = SilentAimSettings.AliveCheck
+    end
     local teamCheck = config.teamCheck
-    if teamCheck == nil then teamCheck = ScriptState and ScriptState.aimLockTeamCheck or false end
-    local originPosition = config.origin or getFovOrigin()
-    local ClosestPart, ClosestPlayer, DistanceToMouse
+    if teamCheck == nil then
+        local silentAimTeamCheck = SilentAimSettings.TeamCheck
+        local aimLockTeamCheck = ScriptState and ScriptState.aimLockTeamCheck
+        local toggleValue = Toggles and Toggles.TeamCheck and Toggles.TeamCheck.Value
+        teamCheck = (toggleValue ~= nil and toggleValue) or silentAimTeamCheck or aimLockTeamCheck or false
+    end
+    local teamEvaluator = config.teamEvaluator
+    if type(teamEvaluator) ~= "function" then
+        teamEvaluator = playersOnSameTeam
+    end
+    local originPosition = config.origin
+    if typeof(originPosition) == "function" then
+        originPosition = originPosition()
+    end
+    originPosition = originPosition or getFovOrigin()
+    local ClosestPart
+    local ClosestPlayer
+    local DistanceToMouse
     for _, Player in next, GetPlayers(Players) do
-        if Player == LocalPlayer then continue end
-        if teamCheck and (Player.Team == LocalPlayer.Team) then continue end
-        if visibleCheck and not IsPlayerVisible(Player) then continue end
+        if Player == LocalPlayer then
+            continue
+        end
+        if ignoredPlayers and ignoredPlayers[Player.Name] then
+            continue
+        end
+        if teamCheck and teamEvaluator(Player) then
+            continue
+        end
+        if visibleCheck and not IsPlayerVisible(Player) then
+            continue
+        end
         local Character = Player.Character
-        if not Character then continue end
+        if not Character then
+            continue
+        end
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
-        if not HumanoidRootPart or not Humanoid then continue end
-        if aliveCheck and Humanoid.Health <= 0 then continue end
+        if not HumanoidRootPart or not Humanoid then
+            continue
+        end
+        if aliveCheck and Humanoid.Health <= 0 then
+            continue
+        end
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then continue end
+        if not OnScreen then
+            continue
+        end
         local Distance = (originPosition - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or radiusOption) then
-            local targetPartName = targetPartOption == "Random" and ValidTargetParts[math.random(1, #ValidTargetParts)] or targetPartOption
+            local targetPartName
+            if targetPartOption == "Random" then
+                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
+            else
+                targetPartName = targetPartOption
+            end
             local candidatePart = Character[targetPartName]
             if candidatePart then
                 ClosestPart = candidatePart
@@ -275,19 +421,33 @@ local function getClosestPlayer(config)
     return ClosestPart, ClosestPlayer
 end
 
-local function getBodyPart(character, part) return character:FindFirstChild(part) and part or "Head" end
+local function getBodyPart(character, part)
+    return character:FindFirstChild(part) and part or "Head"
+end
 
-local function acquireLockTarget()
+local function getNearestPlayerToMouse()
     local _, player = getClosestPlayer({
         targetPart = ScriptState.bodyPartSelected,
         visibleCheck = ScriptState.aimLockVisibleCheck,
         aliveCheck = ScriptState.aimLockAliveCheck,
         teamCheck = ScriptState.aimLockTeamCheck
     })
+    if player and player ~= LocalPlayer then
+        return player
+    end
+    return nil
+end
+
+local function acquireLockTarget()
+    local player = getNearestPlayerToMouse()
     if player and player.Character then
-        ScriptState.isLockedOn = true
-        ScriptState.targetPlayer = player
-        return true
+        local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
+        local targetPart = player.Character:FindFirstChild(partName)
+        if targetPart then
+            ScriptState.isLockedOn = true
+            ScriptState.targetPlayer = player
+            return true
+        end
     end
     ScriptState.isLockedOn = false
     ScriptState.targetPlayer = nil
@@ -295,19 +455,53 @@ local function acquireLockTarget()
 end
 
 local function toggleLockOnPlayer(forceState)
-    local desiredState = forceState == nil and not ScriptState.lockEnabled or forceState
+    if not ScriptState.masterAimLock then
+        ScriptState.lockEnabled = false
+        ScriptState.isLockedOn = false
+        ScriptState.targetPlayer = nil
+        if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= false then
+            Toggles.aimLockKeyToggle:SetValue(false)
+        end
+        return
+    end
+    local desiredState = forceState
+    if desiredState == nil then
+        desiredState = not ScriptState.lockEnabled
+    end
     ScriptState.lockEnabled = desiredState
-    if desiredState then acquireLockTarget()
-    else ScriptState.isLockedOn = false; ScriptState.targetPlayer = nil end
+    if desiredState then
+        acquireLockTarget()
+    else
+        ScriptState.isLockedOn = false
+        ScriptState.targetPlayer = nil
+    end
+    if Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
+        Toggles.aimLockKeyToggle:SetValue(desiredState)
+    end
 end
 
 RunService.RenderStepped:Connect(function()
+    if not ScriptState.masterAimLock then return end
+    if ScriptState.lockEnabled and not ScriptState.isLockedOn then
+        acquireLockTarget()
+    end
     if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+        if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
+            return
+        end
+        if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
+            return
+        end
         local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
         local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
         if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+            local currentCameraPosition = Camera.CFrame.Position
+            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
             ScriptState.isLockedOn = false
             ScriptState.targetPlayer = nil
@@ -318,48 +512,234 @@ end)
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/legacyMobile_Lib.lua"))()
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
-local Window = Library:CreateWindow({Title = 'FinalRound  |  anmultv1234', Center = true, AutoShow = true, TabPadding = 8, MenuFadeTime = 0.2})
+local Window = Library:CreateWindow({
+    Title = 'FinalRound  |  anmultv1234',
+    Center = true,
+    AutoShow = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2
+})
+
 local GeneralTab = Window:AddTab("Main")
 local aimbox = GeneralTab:AddRightGroupbox("AimLock")
+local velbox = GeneralTab:AddRightGroupbox("Anti Lock")
+local frabox = GeneralTab:AddRightGroupbox("Movement")
+local ExploitTab = Window:AddTab("Exploits")
+local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
+local VisualsTab = Window:AddTab("Visuals")
+local settingsTab = Window:AddTab("Settings")
+local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
+MenuGroup:AddButton("Unload", function() Library:Unload() end)
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "None", NoUI = true, Text = "Menu keybind" })
 
-local AimLockGui = Instance.new("ScreenGui")
-AimLockGui.Name = "AimLockGui"
-AimLockGui.Parent = game.CoreGui
-AimLockGui.Enabled = false
-local AimLockToggleBtn = Instance.new("TextButton")
-AimLockToggleBtn.Parent = AimLockGui
-AimLockToggleBtn.Size = UDim2.new(0, 100, 0, 40)
-AimLockToggleBtn.Position = UDim2.new(0.5, -50, 0.1, 0)
-AimLockToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-AimLockToggleBtn.Text = "AimLock: OFF"
-AimLockToggleBtn.TextColor3 = Color3.new(1,1,1)
-AimLockToggleBtn.MouseButton1Click:Connect(function()
-    ScriptState.lockEnabled = not ScriptState.lockEnabled
-    AimLockToggleBtn.Text = ScriptState.lockEnabled and "AimLock: ON" or "AimLock: OFF"
-    AimLockToggleBtn.BackgroundColor3 = ScriptState.lockEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    if not ScriptState.lockEnabled then
-        ScriptState.isLockedOn = false
-        ScriptState.targetPlayer = nil
+Library.ToggleKeybind = Options.MenuKeybind
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+ThemeManager:ApplyToTab(settingsTab)
+SaveManager:BuildConfigSection(settingsTab)
+
+local ScreenGui = Instance.new("ScreenGui")
+local OpenButton = Instance.new("TextButton")
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+OpenButton.Parent = ScreenGui
+OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+OpenButton.Size = UDim2.new(0, 80, 0, 30)
+OpenButton.Position = UDim2.new(1, -100, 0.5, -15)
+OpenButton.Text = "OPEN"
+OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenButton.Font = Enum.Font.Code
+OpenButton.TextSize = 14
+OpenButton.BorderSizePixel = 0
+OpenButton.Active = true
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Thickness = 1.5
+UIStroke.Color = Color3.fromRGB(0, 110, 255)
+UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke.Parent = OpenButton
+
+OpenButton.MouseButton1Click:Connect(function()
+    Library:Toggle()
+end)
+
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    OpenButton.Position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
+end
+
+OpenButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = OpenButton.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
 
-aimbox:AddToggle("aimLockEnabled", {
-    Text = "Enable AimLock UI",
+OpenButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+aimbox:AddToggle("masterAimLockToggle", {
+    Text = "Master AimLock",
     Default = false,
+    Tooltip = "Master switch to enable or disable all AimLock features.",
     Callback = function(value)
-        ScriptState.aimLockEnabled = value
-        AimLockGui.Enabled = value
+        ScriptState.masterAimLock = value
+        if not value then
+            toggleLockOnPlayer(false)
+        end
     end
 })
 
-aimbox:AddSlider("Smoothing", { Text = "Camera Smoothing", Default = 0.1, Min = 0, Max = 1, Rounding = 2, Callback = function(v) ScriptState.smoothingFactor = v end })
-aimbox:AddSlider("Prediction", { Text = "Prediction Factor", Default = 0.0, Min = 0, Max = 2, Rounding = 2, Callback = function(v) ScriptState.predictionFactor = v end })
-aimbox:AddToggle("aimLockVisibleCheck", { Text = "Visible Check", Default = false, Callback = function(v) ScriptState.aimLockVisibleCheck = v end })
-aimbox:AddToggle("aimLockAliveCheck", { Text = "Alive Check", Default = false, Callback = function(v) ScriptState.aimLockAliveCheck = v end })
-aimbox:AddToggle("aimLockTeamCheck", { Text = "Team Check", Default = false, Callback = function(v) ScriptState.aimLockTeamCheck = v end })
-aimbox:AddDropdown("BodyParts", { Values = {"Head", "UpperTorso", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", "LeftUpperArm"}, Default = "Head", Multi = false, Text = "Target Body Part", Callback = function(v) ScriptState.bodyPartSelected = v end })
+local lastAimLockKeyState = false
+local lastAimLockKeyMode = ScriptState.aimLockKeyMode
+aimbox:AddToggle("aimLockKeyToggle", {
+    Text = "aimlock",
+    Default = false,
+    Tooltip = "Toggle AimLock on or off.",
+    Callback = function(value)
+        if ScriptState.lockEnabled == value then
+            return
+        end
+        toggleLockOnPlayer(value)
+    end,
+}):AddKeyPicker("aimLock_KeyPicker", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = ScriptState.aimLockKeyMode,
+    Text = "AimLock",
+    Tooltip = "Keybind for AimLock",
+    Callback = function()
+        if Options.aimLock_KeyPicker.Mode == "Toggle" then
+            toggleLockOnPlayer(Options.aimLock_KeyPicker:GetState())
+        end
+    end,
+    ChangedCallback = function()
+        lastAimLockKeyState = Options.aimLock_KeyPicker:GetState()
+    end
+})
 
+lastAimLockKeyState = Options.aimLock_KeyPicker:GetState()
+lastAimLockKeyMode = Options.aimLock_KeyPicker.Mode or lastAimLockKeyMode
+ScriptState.aimLockKeyMode = lastAimLockKeyMode
 
+RunService.RenderStepped:Connect(function()
+    if not ScriptState.masterAimLock then return end
+    local keyPicker = Options.aimLock_KeyPicker
+    if not keyPicker then
+        return
+    end
+    local currentMode = keyPicker.Mode or "Toggle"
+    if currentMode ~= lastAimLockKeyMode then
+        ScriptState.aimLockKeyMode = currentMode
+        lastAimLockKeyMode = currentMode
+        lastAimLockKeyState = keyPicker:GetState()
+        if lastAimLockKeyState then
+            toggleLockOnPlayer(true)
+        elseif ScriptState.lockEnabled and not lastAimLockKeyState then
+            toggleLockOnPlayer(false)
+        end
+    end
+    if currentMode ~= "Toggle" then
+        local currentState = keyPicker:GetState()
+        if currentState ~= lastAimLockKeyState then
+            toggleLockOnPlayer(currentState)
+            lastAimLockKeyState = currentState
+        elseif currentMode == "Always" and not ScriptState.lockEnabled then
+            toggleLockOnPlayer(true)
+            lastAimLockKeyState = keyPicker:GetState()
+        elseif currentMode == "Hold" and currentState then
+            toggleLockOnPlayer(true)
+        end
+    else
+        lastAimLockKeyState = keyPicker:GetState()
+    end
+end)
+
+aimbox:AddSlider("Smoothing", {
+    Text = "Camera Smoothing",
+    Default = 0.1,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Tooltip = "Adjust camera smoothing factor.",
+    Callback = function(value)
+        ScriptState.smoothingFactor = value
+    end,
+})
+
+aimbox:AddSlider("Prediction", {
+    Text = "Prediction Factor",
+    Default = 0.0,
+    Min = 0,
+    Max = 2,
+    Rounding = 2,
+    Tooltip = "Adjust prediction for target movement.",
+    Callback = function(value)
+        ScriptState.predictionFactor = value
+    end,
+})
+
+aimbox:AddToggle("aimLockVisibleCheck", {
+    Text = "Visible Check",
+    Default = ScriptState.aimLockVisibleCheck,
+    Tooltip = "Skip targets blocked by objects.",
+    Callback = function(value)
+        ScriptState.aimLockVisibleCheck = value
+    end
+})
+
+aimbox:AddToggle("aimLockAliveCheck", {
+    Text = "Alive Check",
+    Default = ScriptState.aimLockAliveCheck,
+    Tooltip = "Ignore eliminated targets.",
+    Callback = function(value)
+        ScriptState.aimLockAliveCheck = value
+    end
+})
+
+aimbox:AddToggle("aimLockTeamCheck", {
+    Text = "Team Check",
+    Default = ScriptState.aimLockTeamCheck,
+    Tooltip = "Avoid locking teammates.",
+    Callback = function(value)
+        ScriptState.aimLockTeamCheck = value
+        if value and ScriptState.lockEnabled and ScriptState.targetPlayer and ScriptState.targetPlayer.Team == LocalPlayer.Team then
+            acquireLockTarget()
+        end
+    end
+})
+
+aimbox:AddDropdown("BodyParts", {
+    Values = {"Head", "UpperTorso", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", "LeftUpperArm"},
+    Default = "Head",
+    Multi = false,
+    Text = "Target Body Part",
+    Tooltip = "Select which body part to lock onto.",
+    Callback = function(value)
+        ScriptState.bodyPartSelected = value
+    end,
+})
 
 getgenv().ScriptState.Desync = false
 RunService.Heartbeat:Connect(function()
