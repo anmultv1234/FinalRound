@@ -53,6 +53,7 @@ end
 
 if not getgenv().ScriptState then
     getgenv().ScriptState = {
+        masterAimLock = false, -- Master AimLock Toggle State
         isLockedOn = false,
         targetPlayer = nil,
         lockEnabled = false,
@@ -96,7 +97,7 @@ end
 local SilentAimSettings = {
     Enabled = false,
 
-    ClassName = "PasteWare  |  github.com/FakeAngles",
+    ClassName = "FinalRound  |  anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
 
@@ -195,13 +196,8 @@ local ExpectedArguments = {
 }
 
 function CalculateChance(Percentage)
-
     Percentage = math.floor(Percentage)
-
-
     local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
-
-
     return chance <= Percentage / 100
 end
 
@@ -509,6 +505,17 @@ local function acquireLockTarget()
 end
 
 local function toggleLockOnPlayer(forceState)
+    -- Master AimLock validation
+    if not ScriptState.masterAimLock then
+        ScriptState.lockEnabled = false
+        ScriptState.isLockedOn = false
+        ScriptState.targetPlayer = nil
+        if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= false then
+            Toggles.aimLockKeyToggle:SetValue(false)
+        end
+        return
+    end
+
     local desiredState = forceState
     if desiredState == nil then
         desiredState = not ScriptState.lockEnabled
@@ -530,6 +537,8 @@ end
 
 
 RunService.RenderStepped:Connect(function()
+    if not ScriptState.masterAimLock then return end -- Master Toggle Check
+
     if ScriptState.lockEnabled and not ScriptState.isLockedOn then
         acquireLockTarget()
     end
@@ -656,6 +665,20 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
+
+-- Master AimLock Toggle
+aimbox:AddToggle("masterAimLockToggle", {
+    Text = "Master AimLock",
+    Default = false,
+    Tooltip = "Master switch to enable or disable all AimLock features.",
+    Callback = function(value)
+        ScriptState.masterAimLock = value
+        if not value then
+            toggleLockOnPlayer(false)
+        end
+    end
+})
+
 local lastAimLockKeyState = false
 local lastAimLockKeyMode = ScriptState.aimLockKeyMode
 
@@ -690,6 +713,8 @@ lastAimLockKeyMode = Options.aimLock_KeyPicker.Mode or lastAimLockKeyMode
 ScriptState.aimLockKeyMode = lastAimLockKeyMode
 
 RunService.RenderStepped:Connect(function()
+    if not ScriptState.masterAimLock then return end -- Master Toggle Check
+
     local keyPicker = Options.aimLock_KeyPicker
     if not keyPicker then
         return
@@ -851,6 +876,8 @@ velbox:AddSlider("ReverseResolveIntensity", {
 
 
 RunService.RenderStepped:Connect(function()
+    if not ScriptState.masterAimLock then return end -- Master Toggle Check
+
     if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
         local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
         local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
@@ -860,17 +887,14 @@ RunService.RenderStepped:Connect(function()
 
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
-
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
                 elseif ScriptState.resolverMethod == "Randomize" then
-
                     predictedPosition = predictedPosition + Vector3.new(
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
                     )
                 elseif ScriptState.resolverMethod == "Invert" then
-
                     predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
