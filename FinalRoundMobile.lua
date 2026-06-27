@@ -53,7 +53,6 @@ end
 
 if not getgenv().ScriptState then
     getgenv().ScriptState = {
-        masterAimLock = false,
         isLockedOn = false,
         targetPlayer = nil,
         lockEnabled = false,
@@ -96,17 +95,21 @@ end
 
 local SilentAimSettings = {
     Enabled = false,
+
     ClassName = "FinalRound  |  anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
+
     TeamCheck = false,
     VisibleCheck = false,
     AliveCheck = false,
     TargetPart = "HumanoidRootPart",
     SilentAimMethod = "Raycast",
+
     FOVRadius = 130,
     FOVVisible = false,
     ShowSilentAimTarget = false,
+
     HitChance = 100,
     MultiplyUnitBy = 1000,
     BlockedMethods = {},
@@ -137,8 +140,10 @@ local HttpService = Services.HttpService
 local ReplicatedStorage = Services.ReplicatedStorage
 local SoundService = Services.SoundService
 local Camera = workspace.CurrentCamera
+
 local LocalPlayer = Players.LocalPlayer
 local Client = LocalPlayer
+
 local GetChildren = game.GetChildren
 local GetPlayers = Players.GetPlayers
 local WorldToScreen = Camera.WorldToScreenPoint
@@ -148,6 +153,7 @@ local FindFirstChild = game.FindFirstChild
 local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
+
 local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
 local PredictionAmount = 0.165
 
@@ -194,6 +200,7 @@ function CalculateChance(Percentage)
     return chance <= Percentage / 100
 end
 
+
 local function getPositionOnScreen(Vector)
     local Vec3, OnScreen = WorldToScreen(Camera, Vector)
     return Vector2.new(Vec3.X, Vec3.Y), OnScreen
@@ -204,19 +211,23 @@ local function ValidateArguments(Args, RayMethod)
     if #Args < RayMethod.ArgCountRequired then
         return false
     end
+
     for Pos, Argument in next, Args do
         local Expected = RayMethod.Args[Pos]
         if not Expected then
             break
         end
+
         local IsOptional = Expected:sub(-1) == "?"
         local BaseType = IsOptional and Expected:sub(1, -2) or Expected
+
         if typeof(Argument) == BaseType then
             Matches = Matches + 1
         elseif IsOptional and Argument == nil then
             Matches = Matches + 1
         end
     end
+
     return Matches >= RayMethod.ArgCountRequired
 end
 
@@ -233,6 +244,7 @@ local function getFovOrigin()
         local viewportSize = Camera.ViewportSize
         return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
     end
+
     return getMousePosition()
 end
 
@@ -247,6 +259,7 @@ local function playersOnSameTeam(player)
     if not player then
         return false
     end
+
     local option = getTeamComparisonOption()
     if option then
         local okLocal, localValue = pcall(function()
@@ -255,44 +268,55 @@ local function playersOnSameTeam(player)
         local okTarget, targetValue = pcall(function()
             return player[option]
         end)
+
         if okLocal and okTarget and localValue ~= nil and targetValue ~= nil then
             return targetValue == localValue
         end
     end
+
     local okLocalTeam, localTeam = pcall(function()
         return LocalPlayer.Team
     end)
     local okTargetTeam, targetTeam = pcall(function()
         return player.Team
     end)
+
     if okLocalTeam and okTargetTeam and localTeam and targetTeam then
         return targetTeam == localTeam
     end
+
     local okLocalColor, localColor = pcall(function()
         return LocalPlayer.TeamColor
     end)
     local okTargetColor, targetColor = pcall(function()
         return player.TeamColor
     end)
+
     if okLocalColor and okTargetColor and localColor and targetColor then
         return targetColor == localColor
     end
+
     return false
 end
 
 local function IsPlayerVisible(Player)
     local PlayerCharacter = Player and Player.Character
     local LocalPlayerCharacter = LocalPlayer.Character
+
     if not (PlayerCharacter and LocalPlayerCharacter) then
         return false
     end
+
     local targetPartOption = (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart or "HumanoidRootPart"
     local PlayerRoot = FindFirstChild(PlayerCharacter, targetPartOption) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
+
     if not PlayerRoot then
         return false
     end
+
     local CastPoints, IgnoreList = { PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter }, { LocalPlayerCharacter, PlayerCharacter }
     local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+
     return ObscuringObjects == 0
 end
 
@@ -300,11 +324,14 @@ local function normalizeSelection(selection)
     if not selection then
         return {}
     end
+
     local normalized = {}
+
     if type(selection) ~= "table" then
         normalized[selection] = true
         return normalized
     end
+
     local hasNumericKeys = false
     for key in pairs(selection) do
         if type(key) == "number" then
@@ -312,6 +339,7 @@ local function normalizeSelection(selection)
             break
         end
     end
+
     if hasNumericKeys then
         for _, value in ipairs(selection) do
             normalized[value] = true
@@ -327,6 +355,7 @@ local function normalizeSelection(selection)
             end
         end
     end
+
     return normalized
 end
 
@@ -340,10 +369,12 @@ SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
 local function getClosestPlayer(config)
     config = config or {}
+
     local targetPartOption = config.targetPart or (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart
     if not targetPartOption then
         return nil, nil
     end
+
     local ignoredPlayers = config.ignoredPlayers or (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value)
     local radiusOption = config.radius or (Options and Options.Radius and Options.Radius.Value) or SilentAimSettings.FOVRadius or 2000
     local visibleCheck = config.visibleCheck
@@ -361,47 +392,60 @@ local function getClosestPlayer(config)
         local toggleValue = Toggles and Toggles.TeamCheck and Toggles.TeamCheck.Value
         teamCheck = (toggleValue ~= nil and toggleValue) or silentAimTeamCheck or aimLockTeamCheck or false
     end
+
     local teamEvaluator = config.teamEvaluator
     if type(teamEvaluator) ~= "function" then
         teamEvaluator = playersOnSameTeam
     end
+
     local originPosition = config.origin
     if typeof(originPosition) == "function" then
         originPosition = originPosition()
     end
     originPosition = originPosition or getFovOrigin()
+
     local ClosestPart
     local ClosestPlayer
     local DistanceToMouse
+
     for _, Player in next, GetPlayers(Players) do
         if Player == LocalPlayer then
             continue
         end
+
         if ignoredPlayers and ignoredPlayers[Player.Name] then
             continue
         end
+
         if teamCheck and teamEvaluator(Player) then
             continue
         end
+
         if visibleCheck and not IsPlayerVisible(Player) then
             continue
         end
+
         local Character = Player.Character
         if not Character then
             continue
         end
+
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
+
         if not HumanoidRootPart or not Humanoid then
             continue
         end
+
         if aliveCheck and Humanoid.Health <= 0 then
             continue
         end
+
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
         if not OnScreen then
             continue
         end
+
         local Distance = (originPosition - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or radiusOption) then
             local targetPartName
@@ -410,6 +454,7 @@ local function getClosestPlayer(config)
             else
                 targetPartName = targetPartOption
             end
+
             local candidatePart = Character[targetPartName]
             if candidatePart then
                 ClosestPart = candidatePart
@@ -418,6 +463,7 @@ local function getClosestPlayer(config)
             end
         end
     end
+
     return ClosestPart, ClosestPlayer
 end
 
@@ -435,6 +481,7 @@ local function getNearestPlayerToMouse()
     if player and player ~= LocalPlayer then
         return player
     end
+
     return nil
 end
 
@@ -443,64 +490,65 @@ local function acquireLockTarget()
     if player and player.Character then
         local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
         local targetPart = player.Character:FindFirstChild(partName)
+
         if targetPart then
             ScriptState.isLockedOn = true
             ScriptState.targetPlayer = player
             return true
         end
     end
+
     ScriptState.isLockedOn = false
     ScriptState.targetPlayer = nil
     return false
 end
 
 local function toggleLockOnPlayer(forceState)
-    if not ScriptState.masterAimLock then
-        ScriptState.lockEnabled = false
-        ScriptState.isLockedOn = false
-        ScriptState.targetPlayer = nil
-        if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= false then
-            Toggles.aimLockKeyToggle:SetValue(false)
-        end
-        return
-    end
     local desiredState = forceState
     if desiredState == nil then
         desiredState = not ScriptState.lockEnabled
     end
+
     ScriptState.lockEnabled = desiredState
+
     if desiredState then
         acquireLockTarget()
     else
         ScriptState.isLockedOn = false
         ScriptState.targetPlayer = nil
     end
+
     if Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
         Toggles.aimLockKeyToggle:SetValue(desiredState)
     end
 end
 
+
 RunService.RenderStepped:Connect(function()
-    if not ScriptState.masterAimLock then return end
     if ScriptState.lockEnabled and not ScriptState.isLockedOn then
         acquireLockTarget()
     end
+
     if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
         if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
             ScriptState.isLockedOn = false
             ScriptState.targetPlayer = nil
             return
         end
+
         if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
             ScriptState.isLockedOn = false
             ScriptState.targetPlayer = nil
             return
         end
+
         local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
         local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+
         if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
             local currentCameraPosition = Camera.CFrame.Position
+
             Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
             ScriptState.isLockedOn = false
@@ -508,6 +556,8 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
+
+
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/legacyMobile_Lib.lua"))()
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
@@ -540,8 +590,10 @@ SaveManager:BuildConfigSection(settingsTab)
 
 local ScreenGui = Instance.new("ScreenGui")
 local OpenButton = Instance.new("TextButton")
+local AimToggleBtn = Instance.new("TextButton")
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
 OpenButton.Parent = ScreenGui
 OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 OpenButton.Size = UDim2.new(0, 80, 0, 30)
@@ -553,66 +605,81 @@ OpenButton.TextSize = 14
 OpenButton.BorderSizePixel = 0
 OpenButton.Active = true
 
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Thickness = 1.5
-UIStroke.Color = Color3.fromRGB(0, 110, 255)
-UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-UIStroke.Parent = OpenButton
+AimToggleBtn.Parent = ScreenGui
+AimToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AimToggleBtn.Size = UDim2.new(0, 80, 0, 30)
+AimToggleBtn.Position = UDim2.new(1, -100, 0.5, 20)
+AimToggleBtn.Text = "Aim: OFF"
+AimToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AimToggleBtn.Font = Enum.Font.Code
+AimToggleBtn.TextSize = 14
+AimToggleBtn.BorderSizePixel = 0
+AimToggleBtn.Active = true
+
+local UIStroke1 = Instance.new("UIStroke")
+UIStroke1.Thickness = 1.5
+UIStroke1.Color = Color3.fromRGB(0, 110, 255)
+UIStroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke1.Parent = OpenButton
+
+local UIStroke2 = Instance.new("UIStroke")
+UIStroke2.Thickness = 1.5
+UIStroke2.Color = Color3.fromRGB(0, 110, 255)
+UIStroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke2.Parent = AimToggleBtn
 
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
 end)
 
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-    local delta = input.Position - dragStart
-    OpenButton.Position = UDim2.new(
-        startPos.X.Scale,
-        startPos.X.Offset + delta.X,
-        startPos.Y.Scale,
-        startPos.Y.Offset + delta.Y
-    )
+AimToggleBtn.MouseButton1Click:Connect(function()
+    local newState = not ScriptState.lockEnabled
+    toggleLockOnPlayer(newState)
+    AimToggleBtn.Text = newState and "Aim: ON" or "Aim: OFF"
+end)
+
+local function makeDraggable(button)
+    local dragging, dragInput, dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        button.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = button.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    button.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
 end
 
-OpenButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = OpenButton.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
+makeDraggable(OpenButton)
+makeDraggable(AimToggleBtn)
 
-OpenButton.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
-    end
-end)
-
-aimbox:AddToggle("masterAimLockToggle", {
-    Text = "Master AimLock",
-    Default = false,
-    Tooltip = "Master switch to enable or disable all AimLock features.",
-    Callback = function(value)
-        ScriptState.masterAimLock = value
-        if not value then
-            toggleLockOnPlayer(false)
-        end
-    end
-})
 
 local lastAimLockKeyState = false
 local lastAimLockKeyMode = ScriptState.aimLockKeyMode
+
 aimbox:AddToggle("aimLockKeyToggle", {
     Text = "aimlock",
     Default = false,
@@ -622,6 +689,7 @@ aimbox:AddToggle("aimLockKeyToggle", {
             return
         end
         toggleLockOnPlayer(value)
+        AimToggleBtn.Text = value and "Aim: ON" or "Aim: OFF"
     end,
 }):AddKeyPicker("aimLock_KeyPicker", {
     Default = "None",
@@ -644,11 +712,11 @@ lastAimLockKeyMode = Options.aimLock_KeyPicker.Mode or lastAimLockKeyMode
 ScriptState.aimLockKeyMode = lastAimLockKeyMode
 
 RunService.RenderStepped:Connect(function()
-    if not ScriptState.masterAimLock then return end
     local keyPicker = Options.aimLock_KeyPicker
     if not keyPicker then
         return
     end
+
     local currentMode = keyPicker.Mode or "Toggle"
     if currentMode ~= lastAimLockKeyMode then
         ScriptState.aimLockKeyMode = currentMode
@@ -660,6 +728,7 @@ RunService.RenderStepped:Connect(function()
             toggleLockOnPlayer(false)
         end
     end
+
     if currentMode ~= "Toggle" then
         local currentState = keyPicker:GetState()
         if currentState ~= lastAimLockKeyState then
@@ -687,6 +756,7 @@ aimbox:AddSlider("Smoothing", {
         ScriptState.smoothingFactor = value
     end,
 })
+
 
 aimbox:AddSlider("Prediction", {
     Text = "Prediction Factor",
@@ -742,6 +812,7 @@ aimbox:AddDropdown("BodyParts", {
 })
 
 getgenv().ScriptState.Desync = false
+
 RunService.Heartbeat:Connect(function()
     if getgenv().ScriptState.Desync then
         local player = game.Players.LocalPlayer
@@ -750,6 +821,7 @@ RunService.Heartbeat:Connect(function()
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
         if not humanoidRootPart then return end
         local originalVelocity = humanoidRootPart.Velocity
+
         local randomOffset = Vector3.new(
             math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
             math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
@@ -765,6 +837,7 @@ RunService.Heartbeat:Connect(function()
         humanoidRootPart.Velocity = originalVelocity
     end
 end)
+
 
 velbox:AddToggle("desyncEnabled", {
     Text = "Desync",
@@ -784,6 +857,7 @@ velbox:AddToggle("desyncEnabled", {
     end
 })
 
+
 velbox:AddSlider("ReverseResolveIntensity", {
     Text = "velocity intensity",
     Default = 5,
@@ -796,13 +870,16 @@ velbox:AddSlider("ReverseResolveIntensity", {
     end
 })
 
+
+
 RunService.RenderStepped:Connect(function()
-    if not ScriptState.masterAimLock then return end
     if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
         local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
         local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+
         if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
@@ -816,6 +893,7 @@ RunService.RenderStepped:Connect(function()
                     predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
+
             local currentCameraPosition = Camera.CFrame.Position
             Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
@@ -857,8 +935,10 @@ aimbox:AddDropdown("ResolverMethods", {
     end,
 })
 
+
 local MainBOX = GeneralTab:AddLeftTabbox("Silent Aim")
 local Main = MainBOX:AddTab("Silent Aim")
+
 local silentAimToggle = Main:AddToggle("silentAimEnabled", {
     Text = "Silent Aim",
     Default = SilentAimSettings.Enabled,
@@ -885,6 +965,7 @@ silentAimToggle:AddKeyPicker("silentAim_KeyPicker", {
 })
 
 SilentAimSettings.ToggleKey = Options.silentAim_KeyPicker.Value
+
 Main:AddToggle("TeamCheck", {
     Text = "Team Check",
     Default = SilentAimSettings.TeamCheck
@@ -1016,12 +1097,14 @@ end)
 
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     local Main = FieldOfViewBOX:AddTab("Visuals")
+
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
         :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
         :OnChanged(function()
             fov_circle.Visible = Toggles.Visible.Value
             SilentAimSettings.FOVVisible = Toggles.Visible.Value
         end)
+
     Main:AddSlider("Radius", {
         Text = "FOV Circle Radius",
         Min = 0,
@@ -1032,6 +1115,7 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         fov_circle.Radius = Options.Radius.Value
         SilentAimSettings.FOVRadius = Options.Radius.Value
     end)
+
     Main:AddDropdown("FovMode", {
         Values = {"Mouse", "Center"},
         Default = ScriptState.fovMode,
@@ -1040,11 +1124,13 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     }):OnChanged(function()
         ScriptState.fovMode = Options.FovMode.Value
     end)
+
     Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"})
         :AddColorPicker("MouseVisualizeColor", {Default = Color3.fromRGB(54, 57, 241)})
         :OnChanged(function()
             SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
         end)
+
     Main:AddDropdown("PlayerDropdown", {
         SpecialType = "Player",
         Text = "Ignore Player",
@@ -1066,6 +1152,7 @@ task.spawn(function()
             local visibleCheckActive = SilentAimSettings.VisibleCheck or ScriptState.aimLockVisibleCheck
             local teamCheckActive = SilentAimSettings.TeamCheck or ScriptState.aimLockTeamCheck
             local aliveCheckActive = SilentAimSettings.AliveCheck or ScriptState.aimLockAliveCheck
+
             local closestPart, closestPlayer = getClosestPlayer({
                 visibleCheck = visibleCheckActive,
                 teamCheck = teamCheckActive,
@@ -1116,7 +1203,6 @@ task.spawn(function()
         end
     end)
 end)
-
 local sounds = {
     ["RIFK7"] = "rbxassetid://9102080552",
     ["Bubble"] = "rbxassetid://9102092728",
@@ -1131,9 +1217,12 @@ local sounds = {
 local hitSound = Instance.new("Sound")
 hitSound.Volume = 3
 hitSound.Parent = SoundService
+
 local HitSoundBox = GeneralTab:AddRightTabbox("HitSound") do
     local Main = HitSoundBox:AddTab("HitSound [beta]")
+
     Main:AddToggle("HitSoundEnabled", {Text = "Enable HitSound", Default = false})
+
     Main:AddDropdown("HitSoundSelect", {
         Values = {"RIFK7","Bubble","Minecraft","Cod","Bameware","Neverlose","Gamesense","Rust"},
         Default = "Neverlose",
@@ -1146,10 +1235,13 @@ local HitSoundBox = GeneralTab:AddRightTabbox("HitSound") do
         end
     end)
 end
+
 hitSound.SoundId = sounds[Options.HitSoundSelect.Value]
+
 
 local soundPool = {}
 local soundIndex = 1
+
 local function getNextSound()
     if soundIndex > #soundPool then
         local s = hitSound:Clone()
@@ -1170,10 +1262,13 @@ end
 
 local function trackPlayer(plr)
     if plr == LocalPlayer then return end
+
     plr.CharacterAdded:Connect(function(char)
         local hum = char:WaitForChild("Humanoid", 10)
         if not hum then return end
+
         local lastHealth = hum.Health
+
         hum.HealthChanged:Connect(function(newHp)
             if Toggles.HitSoundEnabled.Value then
                 local closestPart, closestPlayer = getClosestPlayer()
@@ -1209,6 +1304,7 @@ local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method, Arguments = getnamecallmethod(), {...}
     local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
+
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
     if Method == "Destroy" and self == Client then
         return
@@ -1216,6 +1312,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     if BlockedMethods[Method] then
         return
     end
+
     local function getIgnoredList()
         if Method == "Raycast" then
             local params = Arguments[4]
@@ -1226,18 +1323,22 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
             return Arguments[3]
         end
     end
+
     local function getOriginalOrigin()
         if Method == "Raycast" then
             return Arguments[2]
         end
+
         if Method == "FindPartOnRayWithIgnoreList" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRay" or Method == "findPartOnRay" then
             local ray = Arguments[2]
             if typeof(ray) == "Ray" then
                 return ray.Origin
             end
         end
+
         return nil
     end
+
     local allowedFireCall = true
     if SilentAimSettings.CheckForFireFunc and (Method == "FindPartOnRay" or Method == "findPartOnRay" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRayWithIgnoreList" or Method == "Raycast" or Method == "ViewportPointToRay" or Method == "ScreenPointToRay") then
         local trace = tostring(debug.traceback()):lower()
@@ -1247,6 +1348,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
             return oldNamecall(...)
         end
     end
+
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
         local HitPart = ScriptState.ClosestHitPart or getClosestPlayer()
         if HitPart then
@@ -1254,33 +1356,40 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
             local originOptions = SilentAimSettings.Origin
             local includeOptions = SilentAimSettings.Include
             local originalOrigin = getOriginalOrigin()
+
             if originalOrigin and originOptions and next(originOptions) then
                 local matchesOrigin = false
                 if isSelectionActive(originOptions, "Camera") and originalOrigin == Camera.CFrame.p then
                     matchesOrigin = true
                 end
+
                 if not matchesOrigin then
                     return oldNamecall(...)
                 end
             end
+
             if ignoredList and includeOptions and next(includeOptions) then
                 if isSelectionActive(includeOptions, "Camera") and not table.find(ignoredList, Camera) then
                     return oldNamecall(...)
                 end
+
                 local character = LocalPlayer.Character
                 if character and isSelectionActive(includeOptions, "Character") and not table.find(ignoredList, character) then
                     return oldNamecall(...)
                 end
             end
+
             local function computeRay(origin)
                 local adjustedOrigin = origin
                 if SilentAimSettings.BulletTP then
                     adjustedOrigin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
                 end
+
                 local multiplier = SilentAimSettings.MultiplyUnitBy or 1000
                 local direction = getDirection(adjustedOrigin, HitPart.Position) * multiplier
                 return adjustedOrigin, direction
             end
+
             if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
                     local Origin, Direction = computeRay(Arguments[2].Origin)
@@ -1324,10 +1433,13 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
             end
         end
     end
+
     return oldNamecall(...)
 end))
 
+
 local worldbox = VisualsTab:AddRightGroupbox("World")
+
 local lighting = Services.Lighting
 ScriptState.lockedTime, ScriptState.fovValue, ScriptState.nebulaEnabled = 12, 70, false
 local originalAmbient, originalOutdoorAmbient = lighting.Ambient, lighting.OutdoorAmbient
@@ -1381,6 +1493,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+
 worldbox:AddToggle("nebula_theme", {
     Text = "Nebula Theme", Default = false,
     Callback = function(state)
@@ -1414,6 +1527,7 @@ worldbox:AddToggle("nebula_theme", {
     end,
 })
 
+
 local Lighting = Services.Lighting
 local Visuals = {}
 local Skyboxes = {}
@@ -1435,6 +1549,7 @@ end
 function Visuals:SwitchSkybox(Name)
     local OldSky = Lighting:FindFirstChildOfClass("Sky")
     if OldSky then OldSky:Destroy() end
+
     local Sky = Instance.new("Sky", Lighting)
     for Index, Value in pairs(Skyboxes[Name]) do
         Sky[Index] = Value
@@ -1454,18 +1569,135 @@ if Lighting:FindFirstChildOfClass("Sky") then
     })
 end
 
-Visuals:NewSky({ Name = "Sunset", SkyboxBk = "rbxassetid://600830446", SkyboxDn = "rbxassetid://600831635", SkyboxFt = "rbxassetid://600832720", SkyboxLf = "rbxassetid://600886090", SkyboxRt = "rbxassetid://600833862", SkyboxUp = "rbxassetid://600835177" })
-Visuals:NewSky({ Name = "Arctic", SkyboxBk = "http://www.roblox.com/asset/?id=225469390", SkyboxDn = "http://www.roblox.com/asset/?id=225469395", SkyboxFt = "http://www.roblox.com/asset/?id=225469403", SkyboxLf = "http://www.roblox.com/asset/?id=225469450", SkyboxRt = "http://www.roblox.com/asset/?id=225469471", SkyboxUp = "http://www.roblox.com/asset/?id=225469481" })
-Visuals:NewSky({ Name = "Space", SkyboxBk = "http://www.roblox.com/asset/?id=166509999", SkyboxDn = "http://www.roblox.com/asset/?id=166510057", SkyboxFt = "http://www.roblox.com/asset/?id=166510116", SkyboxLf = "http://www.roblox.com/asset/?id=166510092", SkyboxRt = "http://www.roblox.com/asset/?id=166510131", SkyboxUp = "http://www.roblox.com/asset/?id=166510114" })
-Visuals:NewSky({ Name = "Roblox Default", SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex", SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex", SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex", SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex", SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex", SkyboxUp = "rbxasset://textures/sky/sky512_up.tex" })
-Visuals:NewSky({ Name = "Red Night", SkyboxBk = "http://www.roblox.com/Asset/?ID=401664839", SkyboxDn = "http://www.roblox.com/Asset/?ID=401664862", SkyboxFt = "http://www.roblox.com/Asset/?ID=401664960", SkyboxLf = "http://www.roblox.com/Asset/?ID=401664881", SkyboxRt = "http://www.roblox.com/Asset/?ID=401664901", SkyboxUp = "http://www.roblox.com/Asset/?ID=401664936" })
-Visuals:NewSky({ Name = "Deep Space", SkyboxBk = "http://www.roblox.com/asset/?id=149397692", SkyboxDn = "http://www.roblox.com/asset/?id=149397686", SkyboxFt = "http://www.roblox.com/asset/?id=149397697", SkyboxLf = "http://www.roblox.com/asset/?id=149397684", SkyboxRt = "http://www.roblox.com/asset/?id=149397688", SkyboxUp = "http://www.roblox.com/asset/?id=149397702" })
-Visuals:NewSky({ Name = "Pink Skies", SkyboxBk = "http://www.roblox.com/asset/?id=151165214", SkyboxDn = "http://www.roblox.com/asset/?id=151165197", SkyboxFt = "http://www.roblox.com/asset/?id=151165224", SkyboxLf = "http://www.roblox.com/asset/?id=151165191", SkyboxRt = "http://www.roblox.com/asset/?id=151165206", SkyboxUp = "http://www.roblox.com/asset/?id=151165227" })
-Visuals:NewSky({ Name = "Purple Sunset", SkyboxBk = "rbxassetid://264908339", SkyboxDn = "rbxassetid://264907909", SkyboxFt = "rbxassetid://264909420", SkyboxLf = "rbxassetid://264909758", SkyboxRt = "rbxassetid://264908886", SkyboxUp = "rbxassetid://264907379" })
-Visuals:NewSky({ Name = "Blue Night", SkyboxBk = "http://www.roblox.com/Asset/?ID=12064107", SkyboxDn = "http://www.roblox.com/Asset/?ID=12064152", SkyboxFt = "http://www.roblox.com/Asset/?ID=12064121", SkyboxLf = "http://www.roblox.com/Asset/?ID=12063984", SkyboxRt = "http://www.roblox.com/Asset/?ID=12064115", SkyboxUp = "http://www.roblox.com/Asset/?ID=12064131" })
-Visuals:NewSky({ Name = "Blossom Daylight", SkyboxBk = "http://www.roblox.com/asset/?id=271042516", SkyboxDn = "http://www.roblox.com/asset/?id=271077243", SkyboxFt = "http://www.roblox.com/asset/?id=271042556", SkyboxLf = "http://www.roblox.com/asset/?id=271042310", SkyboxRt = "http://www.roblox.com/asset/?id=271042467", SkyboxUp = "http://www.roblox.com/asset/?id=271077958" })
-Visuals:NewSky({ Name = "Blue Nebula", SkyboxBk = "http://www.roblox.com/asset?id=135207744", SkyboxDn = "http://www.roblox.com/asset?id=135207662", SkyboxFt = "http://www.roblox.com/asset?id=135207770", SkyboxLf = "http://www.roblox.com/asset?id=135207615", SkyboxRt = "http://www.roblox.com/asset?id=135207695", SkyboxUp = "http://www.roblox.com/asset?id=135207794" })
-Visuals:NewSky({ Name = "Blue Planet", SkyboxBk = "rbxassetid://218955819", SkyboxDn = "rbxassetid://218953419", SkyboxFt = "rbxassetid://218954524", SkyboxLf = "rbxassetid://218958493", SkyboxRt = "rbxassetid://218957134", SkyboxUp = "rbxassetid://218950090" })
+Visuals:NewSky({
+    Name = "Sunset",
+    SkyboxBk = "rbxassetid://600830446",
+    SkyboxDn = "rbxassetid://600831635",
+    SkyboxFt = "rbxassetid://600832720",
+    SkyboxLf = "rbxassetid://600886090",
+    SkyboxRt = "rbxassetid://600833862",
+    SkyboxUp = "rbxassetid://600835177"
+})
+
+Visuals:NewSky({
+    Name = "Arctic",
+    SkyboxBk = "http://www.roblox.com/asset/?id=225469390",
+    SkyboxDn = "http://www.roblox.com/asset/?id=225469395",
+    SkyboxFt = "http://www.roblox.com/asset/?id=225469403",
+    SkyboxLf = "http://www.roblox.com/asset/?id=225469450",
+    SkyboxRt = "http://www.roblox.com/asset/?id=225469471",
+    SkyboxUp = "http://www.roblox.com/asset/?id=225469481"
+})
+
+Visuals:NewSky({
+    Name = "Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=166509999",
+    SkyboxDn = "http://www.roblox.com/asset/?id=166510057",
+    SkyboxFt = "http://www.roblox.com/asset/?id=166510116",
+    SkyboxLf = "http://www.roblox.com/asset/?id=166510092",
+    SkyboxRt = "http://www.roblox.com/asset/?id=166510131",
+    SkyboxUp = "http://www.roblox.com/asset/?id=166510114"
+})
+
+Visuals:NewSky({
+    Name = "Roblox Default",
+    SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex",
+    SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex",
+    SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex",
+    SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex",
+    SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex",
+    SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+})
+
+Visuals:NewSky({
+    Name = "Red Night",
+    SkyboxBk = "http://www.roblox.com/Asset/?ID=401664839";
+    SkyboxDn = "http://www.roblox.com/Asset/?ID=401664862";
+    SkyboxFt = "http://www.roblox.com/Asset/?ID=401664960";
+    SkyboxLf = "http://www.roblox.com/Asset/?ID=401664881";
+    SkyboxRt = "http://www.roblox.com/Asset/?ID=401664901";
+    SkyboxUp = "http://www.roblox.com/Asset/?ID=401664936";
+})
+
+Visuals:NewSky({
+    Name = "Deep Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=149397692";
+    SkyboxDn = "http://www.roblox.com/asset/?id=149397686";
+    SkyboxFt = "http://www.roblox.com/asset/?id=149397697";
+    SkyboxLf = "http://www.roblox.com/asset/?id=149397684";
+    SkyboxRt = "http://www.roblox.com/asset/?id=149397688";
+    SkyboxUp = "http://www.roblox.com/asset/?id=149397702";
+})
+
+Visuals:NewSky({
+    Name = "Pink Skies",
+    SkyboxBk = "http://www.roblox.com/asset/?id=151165214";
+    SkyboxDn = "http://www.roblox.com/asset/?id=151165197";
+    SkyboxFt = "http://www.roblox.com/asset/?id=151165224";
+    SkyboxLf = "http://www.roblox.com/asset/?id=151165191";
+    SkyboxRt = "http://www.roblox.com/asset/?id=151165206";
+    SkyboxUp = "http://www.roblox.com/asset/?id=151165227";
+})
+
+Visuals:NewSky({
+    Name = "Purple Sunset",
+    SkyboxBk = "rbxassetid://264908339";
+    SkyboxDn = "rbxassetid://264907909";
+    SkyboxFt = "rbxassetid://264909420";
+    SkyboxLf = "rbxassetid://264909758";
+    SkyboxRt = "rbxassetid://264908886";
+    SkyboxUp = "rbxassetid://264907379";
+})
+
+Visuals:NewSky({
+    Name = "Blue Night",
+    SkyboxBk = "http://www.roblox.com/Asset/?ID=12064107";
+    SkyboxDn = "http://www.roblox.com/Asset/?ID=12064152";
+    SkyboxFt = "http://www.roblox.com/Asset/?ID=12064121";
+    SkyboxLf = "http://www.roblox.com/Asset/?ID=12063984";
+    SkyboxRt = "http://www.roblox.com/Asset/?ID=12064115";
+    SkyboxUp = "http://www.roblox.com/Asset/?ID=12064131";
+})
+
+Visuals:NewSky({
+    Name = "Blossom Daylight",
+    SkyboxBk = "http://www.roblox.com/asset/?id=271042516";
+    SkyboxDn = "http://www.roblox.com/asset/?id=271077243";
+    SkyboxFt = "http://www.roblox.com/asset/?id=271042556";
+    SkyboxLf = "http://www.roblox.com/asset/?id=271042310";
+    SkyboxRt = "http://www.roblox.com/asset/?id=271042467";
+    SkyboxUp = "http://www.roblox.com/asset/?id=271077958";
+})
+
+Visuals:NewSky({
+    Name = "Blue Nebula",
+    SkyboxBk = "http://www.roblox.com/asset?id=135207744";
+    SkyboxDn = "http://www.roblox.com/asset?id=135207662";
+    SkyboxFt = "http://www.roblox.com/asset?id=135207770";
+    SkyboxLf = "http://www.roblox.com/asset?id=135207615";
+    SkyboxRt = "http://www.roblox.com/asset?id=135207695";
+    SkyboxUp = "http://www.roblox.com/asset?id=135207794";
+})
+
+Visuals:NewSky({
+    Name = "Blue Planet",
+    SkyboxBk = "rbxassetid://218955819";
+    SkyboxDn = "rbxassetid://218953419";
+    SkyboxFt = "rbxassetid://218954524";
+    SkyboxLf = "rbxassetid://218958493";
+    SkyboxRt = "rbxassetid://218957134";
+    SkyboxUp = "rbxassetid://218950090";
+})
+
+Visuals:NewSky({
+    Name = "Deep Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=159248188";
+    SkyboxDn = "http://www.roblox.com/asset/?id=159248183";
+    SkyboxFt = "http://www.roblox.com/asset/?id=159248187";
+    SkyboxLf = "http://www.roblox.com/asset/?id=159248173";
+    SkyboxRt = "http://www.roblox.com/asset/?id=159248192";
+    SkyboxUp = "http://www.roblox.com/asset/?id=159248176";
+})
 
 local SkyboxNames = {}
 for Name, _ in pairs(Skyboxes) do
@@ -1485,6 +1717,7 @@ local SkyboxDropdown = worldbox:AddDropdown("SkyboxSelector", {
 end)
 
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
+
 if not _G.ExunysESPLoaded then
     loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
 end
@@ -1547,10 +1780,13 @@ local function addDefinitionControls(group, definitions)
         local getValue = def.Get or function()
             return getProperty(def.Path)
         end
+
         local setValue = def.Set or function(value)
             updateProperty(def.Path, value)
         end
+
         local id = def.Id or makeId(def.Path, def.Suffix)
+
         if def.Type == "toggle" then
             group:AddToggle(id, {
                 Text = def.Name,
@@ -1590,6 +1826,7 @@ local function addDefinitionControls(group, definitions)
                 end
                 table.sort(values)
             end
+
             local current = getValue()
             if def.Map then
                 local mapped
@@ -1601,12 +1838,14 @@ local function addDefinitionControls(group, definitions)
                 end
                 current = mapped
             end
+
             local dropdown = group:AddDropdown(id, {
                 AllowNull = false,
                 Text = def.Name,
                 Values = values,
                 Default = current or def.Default or (values and values[1])
             })
+
             dropdown:OnChanged(function(value)
                 local finalValue = def.Map and def.Map[value] or value
                 setValue(finalValue)
@@ -1638,6 +1877,7 @@ VisualsEx:AddToggle("espEnabled", {
                 ESP:Load()
             end)
         end
+
         updateProperty({"Settings", "Enabled"}, value)
         refreshESPConfiguration()
     end
@@ -1651,8 +1891,10 @@ local fontMap = {
     Monospace = DrawingFonts and DrawingFonts.Monospace or "Monospace"
 }
 local fontValues = {"Plex", "System", "UI", "Monospace"}
+
 local tracerPositionMap = {Bottom = 1, Center = 2, Mouse = 3}
 local tracerPositions = {"Bottom", "Center", "Mouse"}
+
 local healthBarPositionMap = {Top = 1, Bottom = 2, Left = 3, Right = 4}
 local healthBarPositions = {"Top", "Bottom", "Left", "Right"}
 
@@ -1763,12 +2005,14 @@ local function HSVToRGB(h, s, v)
     local x = c * (1 - math.abs((h / 60) % 2 - 1))
     local m = v - c
     local r, g, b = 0, 0, 0
+
     if h < 60 then r, g, b = c, x, 0
     elseif h < 120 then r, g, b = x, c, 0
     elseif h < 180 then r, g, b = 0, c, x
     elseif h < 240 then r, g, b = 0, x, c
     elseif h < 300 then r, g, b = x, 0, c
     else r, g, b = c, 0, x end
+
     return Color3.new(r + m, g + m, b + m)
 end
 
@@ -1812,6 +2056,7 @@ local function updateChams()
 end
 
 RunService.RenderStepped:Connect(updateChams)
+
 LocalPlayer.CharacterAdded:Connect(function(char)
     if ScriptState.SelfChamsEnabled then
         task.wait(1)
@@ -1851,6 +2096,7 @@ VisualsEx:AddLabel("Self Chams Color"):AddColorPicker("selfChamsColor", {
 
 local ChamsOccludedColor = {Color3.fromRGB(128, 0, 128), 0.7}
 local ChamsVisibleColor = {Color3.fromRGB(255, 0, 255), 0.3}
+
 local AdornmentsCache = {}
 local IgnoreNames = {["HumanoidRootPart"] = true}
 
@@ -1892,9 +2138,11 @@ local function ApplyChams(player)
                 end
                 local ad = AdornmentsCache[part]
                 local visible = ScriptState.ChamsEnabled and IsEnemy(player)
+
                 ad[1].Visible = visible
                 ad[1].Color3 = ChamsOccludedColor[1]
                 ad[1].Transparency = ChamsOccludedColor[2]
+
                 ad[2].Visible = visible
                 ad[2].AlwaysOnTop = true
                 ad[2].ZIndex = 9e9
@@ -1929,6 +2177,7 @@ for _, plr in pairs(Players:GetPlayers()) do
 end
 
 RunService.RenderStepped:Connect(UpdateAllChams)
+
 VisualsEx:AddToggle("chamsEnabled", {
     Text = "Chams",
     Default = ScriptState.ChamsEnabled,
@@ -1978,6 +2227,7 @@ VisualsEx:AddSlider("chamsVisibleTransparency", {
 })
 
 local humanoid = nil
+
 frabox:AddToggle("speedEnabled", {
     Text = "Speed Toggle",
     Default = false,
@@ -2058,10 +2308,12 @@ frabox:AddToggle("noClipEnabled", {
 
 getgenv().WeaponOnHands = getgenv().WeaponOnHands or false
 getgenv().WeaponModifyMethod = getgenv().WeaponModifyMethod or "Attribute"
+
 local function findSettingsModuleForWeapon(weapon, property)
     if not (weapon and weapon:IsA("Tool")) then
         return nil
     end
+
     local function moduleSupportsProperty(moduleScript)
         local success, module = pcall(require, moduleScript)
         if success and type(module) == "table" and module[property] ~= nil then
@@ -2069,22 +2321,28 @@ local function findSettingsModuleForWeapon(weapon, property)
         end
         return false
     end
+
     for _, moduleScript in ipairs(weapon:GetDescendants()) do
         if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then
             return moduleScript
         end
     end
+
     local weaponName = weapon.Name
     local searchFolders = {}
+
     local configurations = ReplicatedStorage:FindFirstChild("Configurations")
     if configurations then
         table.insert(searchFolders, configurations)
     end
+
     local acsFolder = ReplicatedStorage:FindFirstChild("ACS_Guns", true)
     if acsFolder then
         table.insert(searchFolders, acsFolder)
     end
+
     table.insert(searchFolders, ReplicatedStorage)
+
     for _, container in ipairs(searchFolders) do
         if typeof(container) == "Instance" then
             local candidate = container:FindFirstChild(weaponName, true)
@@ -2092,6 +2350,7 @@ local function findSettingsModuleForWeapon(weapon, property)
                 if candidate:IsA("ModuleScript") and moduleSupportsProperty(candidate) then
                     return candidate
                 end
+
                 for _, moduleScript in ipairs(candidate:GetDescendants()) do
                     if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then
                         return moduleScript
@@ -2100,6 +2359,7 @@ local function findSettingsModuleForWeapon(weapon, property)
             end
         end
     end
+
     return nil
 end
 
@@ -2107,6 +2367,7 @@ local function modifyWeaponSettings(property, value)
     local player = Players.LocalPlayer
     local backpack = player:WaitForChild("Backpack")
     local character = player.Character or player.CharacterAdded:Wait()
+
     local function applyAttribute(weapon)
         if weapon and weapon:IsA("Tool") then
             pcall(function()
@@ -2114,6 +2375,7 @@ local function modifyWeaponSettings(property, value)
             end)
         end
     end
+
     local function applyRequireModule(weapon)
         local settingsModule = findSettingsModuleForWeapon(weapon, property)
         if settingsModule then
@@ -2123,17 +2385,21 @@ local function modifyWeaponSettings(property, value)
             end
         end
     end
+
     local function processWeapon(weapon)
         if not (weapon and weapon:IsA("Tool")) then
             return
         end
+
         if (getgenv().WeaponModifyMethod or "Attribute") == "Attribute" then
             applyAttribute(weapon)
         else
             applyRequireModule(weapon)
         end
     end
+
     local handledEquippedWeapon = false
+
     if getgenv().WeaponOnHands then
         local toolInHand = character:FindFirstChildOfClass("Tool")
         if toolInHand then
@@ -2141,10 +2407,12 @@ local function modifyWeaponSettings(property, value)
             handledEquippedWeapon = true
         end
     end
+
     if not handledEquippedWeapon then
         for _, item in ipairs(backpack:GetChildren()) do
             processWeapon(item)
         end
+
         local equippedTool = character:FindFirstChildOfClass("Tool")
         if equippedTool and equippedTool.Parent ~= backpack then
             processWeapon(equippedTool)
@@ -2330,12 +2598,15 @@ targetStrafe:AddSlider("strafeSpeedSlider", {
 })
 
 local keybindWatchers = {}
+
 local function registerKeybindWatcher(toggleId, keyPickerId, handlers)
     local toggle = Toggles[toggleId]
     local keyPicker = Options[keyPickerId]
+
     if not (toggle and keyPicker) then
         return
     end
+
     local watcher = {
         toggle = toggle,
         keyPicker = keyPicker,
@@ -2344,14 +2615,17 @@ local function registerKeybindWatcher(toggleId, keyPickerId, handlers)
         modeChanged = handlers and handlers.onModeChanged,
         stateChanged = handlers and handlers.onStateChanged,
     }
+
     if toggle.Value ~= watcher.lastState then
         toggle:SetValue(watcher.lastState)
     elseif watcher.stateChanged then
         watcher.stateChanged(watcher.lastState)
     end
+
     if watcher.modeChanged then
         watcher.modeChanged(watcher.lastMode)
     end
+
     keyPicker:OnChanged(function()
         watcher.lastMode = keyPicker.Mode
         watcher.lastState = keyPicker:GetState()
@@ -2364,6 +2638,7 @@ local function registerKeybindWatcher(toggleId, keyPickerId, handlers)
             watcher.stateChanged(watcher.lastState)
         end
     end)
+
     table.insert(keybindWatchers, watcher)
 end
 
@@ -2387,6 +2662,7 @@ registerKeybindWatcher("strafeToggle", "strafeToggleKey")
 RunService.RenderStepped:Connect(function()
     for _, watcher in ipairs(keybindWatchers) do
         local state = watcher.keyPicker:GetState()
+
         if watcher.keyPicker.Mode ~= watcher.lastMode then
             watcher.lastMode = watcher.keyPicker.Mode
             if watcher.modeChanged then
@@ -2394,6 +2670,7 @@ RunService.RenderStepped:Connect(function()
             end
             state = watcher.keyPicker:GetState()
         end
+
         if state ~= watcher.lastState then
             watcher.lastState = state
             if watcher.toggle.Value ~= state then
@@ -2413,17 +2690,22 @@ end)
 
 while true do
     task.wait()
+
     if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
         local character = LocalPlayer.Character
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
         if character and rootPart then
             humanoid = character:FindFirstChild("Humanoid")
+
             if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
                 local moveDirection = humanoid.MoveDirection.Unit
                 rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
             end
+
             if ScriptState.isFlyActive then
                 local flyDirection = Vector3.zero
+
                 if UserInputService:IsKeyDown(Enum.KeyCode.W) then
                     flyDirection = flyDirection + Camera.CFrame.LookVector
                 end
@@ -2436,13 +2718,16 @@ while true do
                 if UserInputService:IsKeyDown(Enum.KeyCode.D) then
                     flyDirection = flyDirection + Camera.CFrame.RightVector
                 end
+
                 if flyDirection.Magnitude > 0 then
                     flyDirection = flyDirection.Unit
                 end
+
                 local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
                 rootPart.CFrame = CFrame.new(newPosition)
                 rootPart.Velocity = Vector3.new(0, 0, 0)
             end
+
             if ScriptState.isNoClipActive then
                 for _, v in pairs(character:GetDescendants()) do
                     if v:IsA("BasePart") and v.CanCollide then
