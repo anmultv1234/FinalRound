@@ -90,7 +90,6 @@ if not getgenv().ScriptState then
         strafeMode = "Horizontal",
         strafeTargetPart = nil,
         originalCameraMode = nil,
-        unswimEnabled = false,
     }
 end
 
@@ -155,7 +154,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "VehicleSeat", "DriveSeat", "Body"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -373,58 +372,10 @@ SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedM
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
-local function getClosestVehicleTarget()
-    local gameSystems = workspace:FindFirstChild("Game Systems")
-    if not gameSystems then return nil end
-
-    local originPosition = getFovOrigin()
-    local closestPart = nil
-    local shortestDistance = math.huge
-
-    local categories = {"Tank", "Vehicle", "Hovercraft", "Helicopter", "Plane"}
-    for _, catName in ipairs(categories) do
-        local catFolder = gameSystems:FindFirstChild(catName)
-        if catFolder then
-            for _, veh in ipairs(catFolder:GetChildren()) do
-                local targetPart = nil
-                local body = veh:FindFirstChild("Body")
-                local func = veh:FindFirstChild("Functionality")
-                
-                if body then
-                    targetPart = body:FindFirstChild("TargetPart")
-                end
-                if not targetPart and func then
-                    targetPart = func:FindFirstChild("TargetPart")
-                end
-
-                if targetPart and targetPart:IsA("BasePart") then
-                    local screenPos, onScreen = getPositionOnScreen(targetPart.Position)
-                    if onScreen then
-                        local dist = (originPosition - screenPos).Magnitude
-                        if dist < shortestDistance and dist <= (Options and Options.Radius and Options.Radius.Value or SilentAimSettings.FOVRadius or 2000) then
-                            shortestDistance = dist
-                            closestPart = targetPart
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return closestPart
-end
-
 local function getClosestPlayer(config)
     config = config or {}
 
     local targetPartOption = config.targetPart or (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart
-    
-    if targetPartOption == "Vehicle_TargetPart" then
-        local vehPart = getClosestVehicleTarget()
-        if vehPart then
-            return vehPart, {Character = vehPart.Parent.Parent, Name = vehPart.Parent.Parent.Name, Team = nil}
-        end
-    end
-
     if not targetPartOption then
         return nil, nil
     end
@@ -495,25 +446,36 @@ local function getClosestPlayer(config)
             continue
         end
 
-        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then
-            continue
+        local targetPartName
+        if targetPartOption == "Random" then
+            targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
+        else
+            targetPartName = targetPartOption
         end
 
-        local Distance = (originPosition - ScreenPosition).Magnitude
-        if Distance <= (DistanceToMouse or radiusOption) then
-            local targetPartName
-            if targetPartOption == "Random" then
-                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
-            else
-                targetPartName = targetPartOption
+        local candidatePart = Character:FindFirstChild(targetPartName) or Character:FindFirstChild("HumanoidRootPart")
+        if not candidatePart and Character:FindFirstChildOfClass("Humanoid") then
+            local seat = Character:FindFirstChildOfClass("Humanoid").SeatPart
+            if seat then
+                if targetPartName == "VehicleSeat" or targetPartName == "DriveSeat" then
+                    if seat:IsA(targetPartName) then
+                        candidatePart = seat
+                    end
+                elseif targetPartName == "Body" then
+                    candidatePart = seat.Parent:FindFirstChild("Body") or seat
+                end
             end
+        end
 
-            local candidatePart = Character[targetPartName]
-            if candidatePart then
-                ClosestPart = candidatePart
-                ClosestPlayer = Player
-                DistanceToMouse = Distance
+        if candidatePart then
+            local ScreenPosition, OnScreen = getPositionOnScreen(candidatePart.Position)
+            if OnScreen then
+                local Distance = (originPosition - ScreenPosition).Magnitude
+                if Distance <= (DistanceToMouse or radiusOption) then
+                    ClosestPart = candidatePart
+                    ClosestPlayer = Player
+                    DistanceToMouse = Distance
+                end
             end
         end
     end
@@ -1038,7 +1000,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Vehicle_TargetPart", "Random"}
+    Values = {"Head", "HumanoidRootPart", "VehicleSeat", "DriveSeat", "Body", "Random"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
@@ -1927,43 +1889,6 @@ local tracerPositions = {"Bottom", "Center", "Mouse"}
 local healthBarPositionMap = {Top = 1, Bottom = 2, Left = 3, Right = 4}
 local healthBarPositions = {"Top", "Bottom", "Left", "Right"}
 
-VisualsEx:AddToggle("unswimToggle", {
-    Text = "Unswim",
-    Default = false,
-    Callback = function(value)
-        ScriptState.unswimEnabled = value
-        if not value then
-            pcall(function()
-                local character = LocalPlayer.Character
-                if character then
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-                    end
-                end
-            end)
-        end
-    end
-})
-
-task.spawn(function()
-    while true do
-        if ScriptState.unswimEnabled then
-            pcall(function()
-                local character = LocalPlayer.Character
-                if character then
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
-                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-                    end
-                end
-            end)
-        end
-        task.wait(0.01)
-    end
-end)
-
 local ESPSettingsGroup = VisualsTab:AddRightGroupbox("ESP Settings")
 addDefinitionControls(ESPSettingsGroup, {
     {Type = "toggle", Name = "Parts Only", Path = {"Settings", "PartsOnly"}},
@@ -2439,14 +2364,6 @@ local function modifyWeaponSettings(property, value)
             pcall(function()
                 weapon:SetAttribute(property, value)
             end)
-            if property == "Mode" then
-                pcall(function()
-                    local fMode = weapon:FindFirstChild("FireMode") or weapon:FindFirstChild("Mode") or weapon:FindFirstChild("Type")
-                    if fMode and (fMode:IsA("StringValue") or fMode:IsA("ValueObject")) then
-                        fMode.Value = value
-                    end
-                end)
-            end
         end
     end
 
