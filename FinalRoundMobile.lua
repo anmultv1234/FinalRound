@@ -150,7 +150,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
+local ValidTargetParts = {"Head", "Torso", "Right Arm", "Left Arm", "Right Leg", "Left Leg"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -450,7 +450,7 @@ local function getClosestPlayer(config)
                 targetPartName = targetPartOption
             end
 
-            local candidatePart = Character[targetPartName]
+            local candidatePart = Character:FindFirstChild(targetPartName)
             if candidatePart then
                 ClosestPart = candidatePart
                 ClosestPlayer = Player
@@ -1408,8 +1408,12 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     adjustedOrigin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
                 end
 
+                local root = HitPart.Parent:FindFirstChild("HumanoidRootPart")
+                local velocity = root and root.AssemblyLinearVelocity or Vector3.zero
+                local predictedPosition = HitPart.Position + (velocity * PredictionAmount)
+
                 local multiplier = SilentAimSettings.MultiplyUnitBy or 1000
-                local direction = getDirection(adjustedOrigin, HitPart.Position) * multiplier
+                local direction = getDirection(adjustedOrigin, predictedPosition) * multiplier
                 return adjustedOrigin, direction
             end
 
