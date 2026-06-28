@@ -96,7 +96,7 @@ end
 local SilentAimSettings = {
     Enabled = false,
 
-    ClassName = "FinalRound  |  anmultv1234",
+    ClassName = "PasteWare  |  github.com/FakeAngles",
     ToggleKey = "None",
     KeyMode = "Toggle",
 
@@ -154,7 +154,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -195,8 +195,13 @@ local ExpectedArguments = {
 }
 
 function CalculateChance(Percentage)
+
     Percentage = math.floor(Percentage)
+
+
     local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
+
+
     return chance <= Percentage / 100
 end
 
@@ -563,7 +568,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeA
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'FinalRound  |  anmultv1234',
+    Title = 'PasteWare  |  github.com/FakeAngles',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -590,7 +595,6 @@ SaveManager:BuildConfigSection(settingsTab)
 
 local ScreenGui = Instance.new("ScreenGui")
 local OpenButton = Instance.new("TextButton")
-local AimToggleBtn = Instance.new("TextButton")
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
@@ -605,77 +609,52 @@ OpenButton.TextSize = 14
 OpenButton.BorderSizePixel = 0
 OpenButton.Active = true
 
-AimToggleBtn.Parent = ScreenGui
-AimToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-AimToggleBtn.Size = UDim2.new(0, 80, 0, 30)
-AimToggleBtn.Position = UDim2.new(1, -100, 0.5, 20)
-AimToggleBtn.Text = "Aim: OFF"
-AimToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-AimToggleBtn.Font = Enum.Font.Code
-AimToggleBtn.TextSize = 14
-AimToggleBtn.BorderSizePixel = 0
-AimToggleBtn.Active = true
-
-local UIStroke1 = Instance.new("UIStroke")
-UIStroke1.Thickness = 1.5
-UIStroke1.Color = Color3.fromRGB(0, 110, 255)
-UIStroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-UIStroke1.Parent = OpenButton
-
-local UIStroke2 = Instance.new("UIStroke")
-UIStroke2.Thickness = 1.5
-UIStroke2.Color = Color3.fromRGB(0, 110, 255)
-UIStroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-UIStroke2.Parent = AimToggleBtn
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Thickness = 1.5
+UIStroke.Color = Color3.fromRGB(0, 110, 255)
+UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke.Parent = OpenButton
 
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
 end)
 
-AimToggleBtn.MouseButton1Click:Connect(function()
-    local newState = not ScriptState.lockEnabled
-    toggleLockOnPlayer(newState)
-    AimToggleBtn.Text = newState and "Aim: ON" or "Aim: OFF"
-end)
-
-local function makeDraggable(button)
-    local dragging, dragInput, dragStart, startPos
-    local function update(input)
-        local delta = input.Position - dragStart
-        button.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-    button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = button.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    button.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            update(input)
-        end
-    end)
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    OpenButton.Position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
 end
 
-makeDraggable(OpenButton)
-makeDraggable(AimToggleBtn)
+OpenButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = OpenButton.Position
 
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+OpenButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
 
 local lastAimLockKeyState = false
 local lastAimLockKeyMode = ScriptState.aimLockKeyMode
@@ -689,7 +668,6 @@ aimbox:AddToggle("aimLockKeyToggle", {
             return
         end
         toggleLockOnPlayer(value)
-        AimToggleBtn.Text = value and "Aim: ON" or "Aim: OFF"
     end,
 }):AddKeyPicker("aimLock_KeyPicker", {
     Default = "None",
@@ -882,14 +860,17 @@ RunService.RenderStepped:Connect(function()
 
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
+
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
                 elseif ScriptState.resolverMethod == "Randomize" then
+
                     predictedPosition = predictedPosition + Vector3.new(
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
                     )
                 elseif ScriptState.resolverMethod == "Invert" then
+
                     predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
@@ -1009,7 +990,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Random", "RightFoot", "LeftFoot"}
+    Values = {"Head", "HumanoidRootPart", "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "Random"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
