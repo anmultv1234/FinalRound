@@ -95,21 +95,17 @@ end
 
 local SilentAimSettings = {
     Enabled = false,
-
-    ClassName = "PasteWare  |  github.com/FakeAngles",
+    ClassName = "FinalRound  |  anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
-
     TeamCheck = false,
     VisibleCheck = false,
     AliveCheck = false,
     TargetPart = "HumanoidRootPart",
     SilentAimMethod = "Raycast",
-
     FOVRadius = 130,
     FOVVisible = false,
     ShowSilentAimTarget = false,
-
     HitChance = 100,
     MultiplyUnitBy = 1000,
     BlockedMethods = {},
@@ -154,7 +150,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -195,16 +191,10 @@ local ExpectedArguments = {
 }
 
 function CalculateChance(Percentage)
-
     Percentage = math.floor(Percentage)
-
-
     local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
-
-
     return chance <= Percentage / 100
 end
-
 
 local function getPositionOnScreen(Vector)
     local Vec3, OnScreen = WorldToScreen(Camera, Vector)
@@ -523,11 +513,10 @@ local function toggleLockOnPlayer(forceState)
         ScriptState.targetPlayer = nil
     end
 
-    if Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
+    if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
         Toggles.aimLockKeyToggle:SetValue(desiredState)
     end
 end
-
 
 RunService.RenderStepped:Connect(function()
     if ScriptState.lockEnabled and not ScriptState.isLockedOn then
@@ -562,13 +551,11 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-
-
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/legacyMobile_Lib.lua"))()
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'PasteWare  |  github.com/FakeAngles',
+    Title = 'FinalRound  |  anmultv1234',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -656,6 +643,71 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
+local AimLockButton = Instance.new("TextButton")
+AimLockButton.Parent = ScreenGui
+AimLockButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AimLockButton.Size = UDim2.new(0, 80, 0, 30)
+AimLockButton.Position = UDim2.new(1, -100, 0.5, 25)
+AimLockButton.Text = "AIMLOCK"
+AimLockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AimLockButton.Font = Enum.Font.Code
+AimLockButton.TextSize = 14
+AimLockButton.BorderSizePixel = 0
+AimLockButton.Active = true
+
+local AimLockUIStroke = Instance.new("UIStroke")
+AimLockUIStroke.Thickness = 1.5
+AimLockUIStroke.Color = Color3.fromRGB(255, 0, 0)
+AimLockUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+AimLockUIStroke.Parent = AimLockButton
+
+AimLockButton.MouseButton1Click:Connect(function()
+    local newState = not ScriptState.lockEnabled
+    toggleLockOnPlayer(newState)
+    if ScriptState.lockEnabled then
+        AimLockUIStroke.Color = Color3.fromRGB(0, 255, 0)
+    else
+        AimLockUIStroke.Color = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+local aimDragging, aimDragInput, aimDragStart, aimStartPos
+local function aimUpdate(input)
+    local delta = input.Position - aimDragStart
+    AimLockButton.Position = UDim2.new(
+        aimStartPos.X.Scale,
+        aimStartPos.X.Offset + delta.X,
+        aimStartPos.Y.Scale,
+        aimStartPos.Y.Offset + delta.Y
+    )
+end
+
+AimLockButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        aimDragging = true
+        aimDragStart = input.Position
+        aimStartPos = AimLockButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                aimDragging = false
+            end
+        end)
+    end
+end)
+
+AimLockButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        aimDragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == aimDragInput and aimDragging then
+        aimUpdate(input)
+    end
+end)
+
 local lastAimLockKeyState = false
 local lastAimLockKeyMode = ScriptState.aimLockKeyMode
 
@@ -734,7 +786,6 @@ aimbox:AddSlider("Smoothing", {
         ScriptState.smoothingFactor = value
     end,
 })
-
 
 aimbox:AddSlider("Prediction", {
     Text = "Prediction Factor",
@@ -816,7 +867,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-
 velbox:AddToggle("desyncEnabled", {
     Text = "Desync",
     Default = false,
@@ -835,7 +885,6 @@ velbox:AddToggle("desyncEnabled", {
     end
 })
 
-
 velbox:AddSlider("ReverseResolveIntensity", {
     Text = "velocity intensity",
     Default = 5,
@@ -848,8 +897,6 @@ velbox:AddSlider("ReverseResolveIntensity", {
     end
 })
 
-
-
 RunService.RenderStepped:Connect(function()
     if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
         local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
@@ -860,17 +907,14 @@ RunService.RenderStepped:Connect(function()
 
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
-
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
                 elseif ScriptState.resolverMethod == "Randomize" then
-
                     predictedPosition = predictedPosition + Vector3.new(
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
                         math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
                     )
                 elseif ScriptState.resolverMethod == "Invert" then
-
                     predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
@@ -915,7 +959,6 @@ aimbox:AddDropdown("ResolverMethods", {
         ScriptState.resolverMethod = value
     end,
 })
-
 
 local MainBOX = GeneralTab:AddLeftTabbox("Silent Aim")
 local Main = MainBOX:AddTab("Silent Aim")
@@ -990,7 +1033,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Left Leg", "Right Leg", "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg", "Random"}
+    Values = {"Head", "HumanoidRootPart", "Random", "RightFoot", "LeftFoot"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
@@ -1219,7 +1262,6 @@ end
 
 hitSound.SoundId = sounds[Options.HitSoundSelect.Value]
 
-
 local soundPool = {}
 local soundIndex = 1
 
@@ -1418,7 +1460,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     return oldNamecall(...)
 end))
 
-
 local worldbox = VisualsTab:AddRightGroupbox("World")
 
 local lighting = Services.Lighting
@@ -1474,7 +1515,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-
 worldbox:AddToggle("nebula_theme", {
     Text = "Nebula Theme", Default = false,
     Callback = function(state)
@@ -1507,7 +1547,6 @@ worldbox:AddToggle("nebula_theme", {
         end
     end,
 })
-
 
 local Lighting = Services.Lighting
 local Visuals = {}
