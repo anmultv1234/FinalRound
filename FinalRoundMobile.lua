@@ -55,9 +55,7 @@ if not getgenv().ScriptState then
     getgenv().ScriptState = {
         isLockedOn = false,
         targetPlayer = nil,
-        targetPart = nil,
         lockEnabled = false,
-        targetVehicles = false,
         aimLockKeyMode = "Toggle",
         aimLockVisibleCheck = false,
         aimLockAliveCheck = false,
@@ -167,12 +165,30 @@ fov_circle.Transparency = 1
 fov_circle.Color = Color3.fromRGB(54, 57, 241)
 
 local ExpectedArguments = {
-    ViewportPointToRay = { ArgCountRequired = 2, Args = { "number", "number" } },
-    ScreenPointToRay = { ArgCountRequired = 2, Args = { "number", "number" } },
-    Raycast = { ArgCountRequired = 3, Args = { "Instance", "Vector3", "Vector3", "RaycastParams" } },
-    FindPartOnRay = { ArgCountRequired = 2, Args = { "Ray", "Instance?", "boolean?", "boolean?" } },
-    FindPartOnRayWithIgnoreList = { ArgCountRequired = 2, Args = { "Ray", "table", "boolean?", "boolean?" } },
-    FindPartOnRayWithWhitelist = { ArgCountRequired = 2, Args = { "Ray", "table", "boolean?" } }
+    ViewportPointToRay = {
+        ArgCountRequired = 2,
+        Args = { "number", "number" }
+    },
+    ScreenPointToRay = {
+        ArgCountRequired = 2,
+        Args = { "number", "number" }
+    },
+    Raycast = {
+        ArgCountRequired = 3,
+        Args = { "Instance", "Vector3", "Vector3", "RaycastParams" }
+    },
+    FindPartOnRay = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "Instance?", "boolean?", "boolean?" }
+    },
+    FindPartOnRayWithIgnoreList = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "table", "boolean?", "boolean?" }
+    },
+    FindPartOnRayWithWhitelist = {
+        ArgCountRequired = 2,
+        Args = { "Ray", "table", "boolean?" }
+    }
 }
 
 function CalculateChance(Percentage)
@@ -188,15 +204,26 @@ end
 
 local function ValidateArguments(Args, RayMethod)
     local Matches = 0
-    if #Args < RayMethod.ArgCountRequired then return false end
+    if #Args < RayMethod.ArgCountRequired then
+        return false
+    end
+
     for Pos, Argument in next, Args do
         local Expected = RayMethod.Args[Pos]
-        if not Expected then break end
+        if not Expected then
+            break
+        end
+
         local IsOptional = Expected:sub(-1) == "?"
         local BaseType = IsOptional and Expected:sub(1, -2) or Expected
-        if typeof(Argument) == BaseType then Matches = Matches + 1
-        elseif IsOptional and Argument == nil then Matches = Matches + 1 end
+
+        if typeof(Argument) == BaseType then
+            Matches = Matches + 1
+        elseif IsOptional and Argument == nil then
+            Matches = Matches + 1
+        end
     end
+
     return Matches >= RayMethod.ArgCountRequired
 end
 
@@ -213,6 +240,7 @@ local function getFovOrigin()
         local viewportSize = Camera.ViewportSize
         return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
     end
+
     return getMousePosition()
 end
 
@@ -224,54 +252,106 @@ local function getTeamComparisonOption()
 end
 
 local function playersOnSameTeam(player)
-    if not player then return false end
+    if not player then
+        return false
+    end
+
     local option = getTeamComparisonOption()
     if option then
-        local okLocal, localValue = pcall(function() return LocalPlayer[option] end)
-        local okTarget, targetValue = pcall(function() return player[option] end)
+        local okLocal, localValue = pcall(function()
+            return LocalPlayer[option]
+        end)
+        local okTarget, targetValue = pcall(function()
+            return player[option]
+        end)
+
         if okLocal and okTarget and localValue ~= nil and targetValue ~= nil then
             return targetValue == localValue
         end
     end
-    local okLocalTeam, localTeam = pcall(function() return LocalPlayer.Team end)
-    local okTargetTeam, targetTeam = pcall(function() return player.Team end)
-    if okLocalTeam and okTargetTeam and localTeam and targetTeam then return targetTeam == localTeam end
-    local okLocalColor, localColor = pcall(function() return LocalPlayer.TeamColor end)
-    local okTargetColor, targetColor = pcall(function() return player.TeamColor end)
-    if okLocalColor and okTargetColor and localColor and targetColor then return targetColor == localColor end
+
+    local okLocalTeam, localTeam = pcall(function()
+        return LocalPlayer.Team
+    end)
+    local okTargetTeam, targetTeam = pcall(function()
+        return player.Team
+    end)
+
+    if okLocalTeam and okTargetTeam and localTeam and targetTeam then
+        return targetTeam == localTeam
+    end
+
+    local okLocalColor, localColor = pcall(function()
+        return LocalPlayer.TeamColor
+    end)
+    local okTargetColor, targetColor = pcall(function()
+        return player.TeamColor
+    end)
+
+    if okLocalColor and okTargetColor and localColor and targetColor then
+        return targetColor == localColor
+    end
+
     return false
 end
 
 local function IsPlayerVisible(Player)
     local PlayerCharacter = Player and Player.Character
     local LocalPlayerCharacter = LocalPlayer.Character
-    if not (PlayerCharacter and LocalPlayerCharacter) then return false end
+
+    if not (PlayerCharacter and LocalPlayerCharacter) then
+        return false
+    end
+
     local targetPartOption = (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart or "HumanoidRootPart"
     local PlayerRoot = FindFirstChild(PlayerCharacter, targetPartOption) or FindFirstChild(PlayerCharacter, "HumanoidRootPart")
-    if not PlayerRoot then return false end
+
+    if not PlayerRoot then
+        return false
+    end
+
     local CastPoints, IgnoreList = { PlayerRoot.Position, LocalPlayerCharacter, PlayerCharacter }, { LocalPlayerCharacter, PlayerCharacter }
     local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+
     return ObscuringObjects == 0
 end
 
 local function normalizeSelection(selection)
-    if not selection then return {} end
+    if not selection then
+        return {}
+    end
+
     local normalized = {}
-    if type(selection) ~= "table" then normalized[selection] = true return normalized end
+
+    if type(selection) ~= "table" then
+        normalized[selection] = true
+        return normalized
+    end
+
     local hasNumericKeys = false
     for key in pairs(selection) do
-        if type(key) == "number" then hasNumericKeys = true break end
+        if type(key) == "number" then
+            hasNumericKeys = true
+            break
+        end
     end
+
     if hasNumericKeys then
-        for _, value in ipairs(selection) do normalized[value] = true end
+        for _, value in ipairs(selection) do
+            normalized[value] = true
+        end
     else
         for key, value in pairs(selection) do
             if type(key) == "string" then
-                if value == true then normalized[key] = true
-                elseif type(value) == "string" then normalized[value] = true end
+                if value == true then
+                    normalized[key] = true
+                elseif type(value) == "string" then
+                    normalized[value] = true
+                end
             end
         end
     end
+
     return normalized
 end
 
@@ -283,16 +363,57 @@ SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedM
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
+local activeVehicles = {}
+local function updateActiveVehicles()
+    local newVehicles = {}
+    local gameSystems = workspace:FindFirstChild("Game Systems")
+    if gameSystems then
+        local vehicleFolders = {"Tank Workspace", "Hovercraft Workspace", "Helicopter Workspace", "Plane Workspace", "Vehicle Workspace"}
+        for _, folderName in ipairs(vehicleFolders) do
+            local folder = gameSystems:FindFirstChild(folderName)
+            if folder then
+                for _, vehicle in ipairs(folder:GetChildren()) do
+                    local targetPart = nil
+                    local body = vehicle:FindFirstChild("Body")
+                    if body then targetPart = body:FindFirstChild("TargetPart") end
+                    if not targetPart then
+                        local func = vehicle:FindFirstChild("Functionality")
+                        if func then targetPart = func:FindFirstChild("TargetPart") end
+                    end
+                    if targetPart and targetPart:IsA("BasePart") then
+                        table.insert(newVehicles, {model = vehicle, part = targetPart})
+                    end
+                end
+            end
+        end
+    end
+    activeVehicles = newVehicles
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        updateActiveVehicles()
+    end
+end)
+
 local function getClosestPlayer(config)
     config = config or {}
+
     local targetPartOption = config.targetPart or (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart
-    if not targetPartOption then return nil, nil, math.huge end
+    if not targetPartOption then
+        return nil, nil
+    end
+
     local ignoredPlayers = config.ignoredPlayers or (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value)
     local radiusOption = config.radius or (Options and Options.Radius and Options.Radius.Value) or SilentAimSettings.FOVRadius or 2000
     local visibleCheck = config.visibleCheck
-    if visibleCheck == nil then visibleCheck = SilentAimSettings.VisibleCheck end
+    if visibleCheck == nil then
+        visibleCheck = SilentAimSettings.VisibleCheck
+    end
     local aliveCheck = config.aliveCheck
-    if aliveCheck == nil then aliveCheck = SilentAimSettings.AliveCheck end
+    if aliveCheck == nil then
+        aliveCheck = SilentAimSettings.AliveCheck
+    end
     local teamCheck = config.teamCheck
     if teamCheck == nil then
         local silentAimTeamCheck = SilentAimSettings.TeamCheck
@@ -300,37 +421,73 @@ local function getClosestPlayer(config)
         local toggleValue = Toggles and Toggles.TeamCheck and Toggles.TeamCheck.Value
         teamCheck = (toggleValue ~= nil and toggleValue) or silentAimTeamCheck or aimLockTeamCheck or false
     end
+    local checkVehicles = config.targetVehicles
+    if checkVehicles == nil then
+        checkVehicles = SilentAimSettings.TargetVehicles
+    end
+
     local teamEvaluator = config.teamEvaluator
-    if type(teamEvaluator) ~= "function" then teamEvaluator = playersOnSameTeam end
+    if type(teamEvaluator) ~= "function" then
+        teamEvaluator = playersOnSameTeam
+    end
+
     local originPosition = config.origin
-    if typeof(originPosition) == "function" then originPosition = originPosition() end
+    if typeof(originPosition) == "function" then
+        originPosition = originPosition()
+    end
     originPosition = originPosition or getFovOrigin()
 
     local ClosestPart
     local ClosestPlayer
-    local DistanceToMouse = math.huge
+    local DistanceToMouse
 
     for _, Player in next, GetPlayers(Players) do
-        if Player == LocalPlayer then continue end
-        if ignoredPlayers and ignoredPlayers[Player.Name] then continue end
-        if teamCheck and teamEvaluator(Player) then continue end
-        if visibleCheck and not IsPlayerVisible(Player) then continue end
+        if Player == LocalPlayer then
+            continue
+        end
+
+        if ignoredPlayers and ignoredPlayers[Player.Name] then
+            continue
+        end
+
+        if teamCheck and teamEvaluator(Player) then
+            continue
+        end
+
+        if visibleCheck and not IsPlayerVisible(Player) then
+            continue
+        end
+
         local Character = Player.Character
-        if not Character then continue end
+        if not Character then
+            continue
+        end
+
         local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
         local Humanoid = FindFirstChild(Character, "Humanoid")
-        if not HumanoidRootPart or not Humanoid then continue end
-        if aliveCheck and Humanoid.Health <= 0 then continue end
+
+        if not HumanoidRootPart or not Humanoid then
+            continue
+        end
+
+        if aliveCheck and Humanoid.Health <= 0 then
+            continue
+        end
+
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then continue end
+        if not OnScreen then
+            continue
+        end
+
         local Distance = (originPosition - ScreenPosition).Magnitude
-        if Distance <= radiusOption and Distance < DistanceToMouse then
+        if Distance <= (DistanceToMouse or radiusOption) then
             local targetPartName
             if targetPartOption == "Random" then
                 targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
             else
                 targetPartName = targetPartOption
             end
+
             local candidatePart = Character[targetPartName]
             if candidatePart then
                 ClosestPart = candidatePart
@@ -339,106 +496,76 @@ local function getClosestPlayer(config)
             end
         end
     end
-    return ClosestPart, ClosestPlayer, DistanceToMouse
-end
 
-local function getClosestVehicle(config)
-    config = config or {}
-    local radiusOption = config.radius or (Options and Options.Radius and Options.Radius.Value) or SilentAimSettings.FOVRadius or 2000
-    local originPosition = config.origin
-    if typeof(originPosition) == "function" then originPosition = originPosition() end
-    originPosition = originPosition or getFovOrigin()
-
-    local ClosestPart = nil
-    local MinDistance = radiusOption
-
-    local gameSystems = workspace:FindFirstChild("Game Systems")
-    if not gameSystems then return nil, math.huge end
-
-    local workspaces = {"Tank Workspace", "Hovercraft Workspace", "Helicopter Workspace", "Plane Workspace", "Vehicle Workspace"}
-    for _, wsName in ipairs(workspaces) do
-        local wsFolder = gameSystems:FindFirstChild(wsName)
-        if wsFolder then
-            for _, vehicle in ipairs(wsFolder:GetChildren()) do
-                local targetPart = nil
-                if vehicle:FindFirstChild("Body") and vehicle.Body:FindFirstChild("TargetPart") then
-                    targetPart = vehicle.Body.TargetPart
-                elseif vehicle:FindFirstChild("Functionality") and vehicle.Functionality:FindFirstChild("TargetPart") then
-                    targetPart = vehicle.Functionality.TargetPart
-                else
-                    for _, v in ipairs(vehicle:GetDescendants()) do
-                        if v.Name == "TargetPart" and v:IsA("BasePart") then
-                            targetPart = v
-                            break
+    if checkVehicles then
+        for _, vData in ipairs(activeVehicles) do
+            local targetPart = vData.part
+            local vehicle = vData.model
+            if targetPart and targetPart.Parent and vehicle and vehicle.Parent then
+                local ScreenPosition, OnScreen = getPositionOnScreen(targetPart.Position)
+                if OnScreen then
+                    local Distance = (originPosition - ScreenPosition).Magnitude
+                    if Distance <= (DistanceToMouse or radiusOption) then
+                        local isVis = true
+                        if visibleCheck then
+                            local LocalPlayerCharacter = LocalPlayer.Character
+                            if LocalPlayerCharacter then
+                                local CastPoints = {targetPart.Position, LocalPlayerCharacter, vehicle}
+                                local IgnoreList = {LocalPlayerCharacter, vehicle}
+                                local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
+                                if ObscuringObjects > 0 then
+                                    isVis = false
+                                end
+                            end
                         end
-                    end
-                end
-
-                if targetPart then
-                    local ScreenPosition, OnScreen = getPositionOnScreen(targetPart.Position)
-                    if OnScreen then
-                        local Distance = (originPosition - ScreenPosition).Magnitude
-                        if Distance <= MinDistance then
+                        if isVis then
                             ClosestPart = targetPart
-                            MinDistance = Distance
+                            ClosestPlayer = vehicle
+                            DistanceToMouse = Distance
                         end
                     end
                 end
             end
         end
     end
-    return ClosestPart, MinDistance
-end
 
-local function getClosestTarget(config)
-    config = config or {}
-    local pPart, pPlayer, pDist = getClosestPlayer(config)
-    local vPart, vDist = nil, math.huge
-
-    local targetVehicles = config.targetVehicles
-    if targetVehicles == nil then
-        targetVehicles = SilentAimSettings.TargetVehicles or ScriptState.targetVehicles
-    end
-
-    if targetVehicles then
-        vPart, vDist = getClosestVehicle(config)
-        vDist = vDist or math.huge
-    end
-
-    pDist = pDist or math.huge
-
-    if vPart and vDist < pDist then
-        return vPart, nil
-    elseif pPart then
-        return pPart, pPlayer
-    end
-
-    return nil, nil
+    return ClosestPart, ClosestPlayer
 end
 
 local function getBodyPart(character, part)
     return character:FindFirstChild(part) and part or "Head"
 end
 
-local function acquireLockTarget()
-    local part, player = getClosestTarget({
+local function getNearestPlayerToMouse()
+    local _, player = getClosestPlayer({
         targetPart = ScriptState.bodyPartSelected,
         visibleCheck = ScriptState.aimLockVisibleCheck,
         aliveCheck = ScriptState.aimLockAliveCheck,
         teamCheck = ScriptState.aimLockTeamCheck,
-        targetVehicles = ScriptState.targetVehicles
+        targetVehicles = false
     })
-    
-    if part then
-        ScriptState.isLockedOn = true
-        ScriptState.targetPlayer = player
-        ScriptState.targetPart = part
-        return true
+    if player and player ~= LocalPlayer then
+        return player
+    end
+
+    return nil
+end
+
+local function acquireLockTarget()
+    local player = getNearestPlayerToMouse()
+    if player and player.Character then
+        local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
+        local targetPart = player.Character:FindFirstChild(partName)
+
+        if targetPart then
+            ScriptState.isLockedOn = true
+            ScriptState.targetPlayer = player
+            return true
+        end
     end
 
     ScriptState.isLockedOn = false
     ScriptState.targetPlayer = nil
-    ScriptState.targetPart = nil
     return false
 end
 
@@ -447,6 +574,7 @@ local function toggleLockOnPlayer(forceState)
     if desiredState == nil then
         desiredState = not ScriptState.lockEnabled
     end
+
     ScriptState.lockEnabled = desiredState
 
     if desiredState then
@@ -454,7 +582,6 @@ local function toggleLockOnPlayer(forceState)
     else
         ScriptState.isLockedOn = false
         ScriptState.targetPlayer = nil
-        ScriptState.targetPart = nil
     end
 
     if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
@@ -467,49 +594,30 @@ RunService.RenderStepped:Connect(function()
         acquireLockTarget()
     end
 
-    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPart then
-        local part = ScriptState.targetPart
-        if ScriptState.targetPlayer then
-            if not ScriptState.targetPlayer.Character then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-            if ScriptState.aimLockTeamCheck and playersOnSameTeam(ScriptState.targetPlayer) then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-            if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-            local char = ScriptState.targetPlayer.Character
-            if char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health <= 0 then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-            local partName = getBodyPart(char, ScriptState.bodyPartSelected)
-            part = char:FindFirstChild(partName) or part
-        else
-            if not part or not part.Parent then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
+    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+        if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
+            return
         end
 
-        if part then
+        if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
+            return
+        end
+
+        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+
+        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
             local currentCameraPosition = Camera.CFrame.Position
+
             Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+        else
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 end)
@@ -585,6 +693,7 @@ OpenButton.InputBegan:Connect(function(input)
         dragging = true
         dragStart = input.Position
         startPos = OpenButton.Position
+
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
@@ -649,6 +758,7 @@ AimLockButton.InputBegan:Connect(function(input)
         aimDragging = true
         aimDragStart = input.Position
         aimStartPos = AimLockButton.Position
+
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 aimDragging = false
@@ -704,7 +814,10 @@ ScriptState.aimLockKeyMode = lastAimLockKeyMode
 
 RunService.RenderStepped:Connect(function()
     local keyPicker = Options.aimLock_KeyPicker
-    if not keyPicker then return end
+    if not keyPicker then
+        return
+    end
+
     local currentMode = keyPicker.Mode or "Toggle"
     if currentMode ~= lastAimLockKeyMode then
         ScriptState.aimLockKeyMode = currentMode
@@ -716,6 +829,7 @@ RunService.RenderStepped:Connect(function()
             toggleLockOnPlayer(false)
         end
     end
+
     if currentMode ~= "Toggle" then
         local currentState = keyPicker:GetState()
         if currentState ~= lastAimLockKeyState then
@@ -754,18 +868,6 @@ aimbox:AddSlider("Prediction", {
     Callback = function(value)
         ScriptState.predictionFactor = value
     end,
-})
-
-aimbox:AddToggle("aimLockVehicleCheck", {
-    Text = "Target Vehicles",
-    Default = ScriptState.targetVehicles,
-    Tooltip = "Lock onto vehicles.",
-    Callback = function(value)
-        ScriptState.targetVehicles = value
-        if value and ScriptState.lockEnabled then
-            acquireLockTarget()
-        end
-    end
 })
 
 aimbox:AddToggle("aimLockVisibleCheck", {
@@ -819,6 +921,7 @@ RunService.Heartbeat:Connect(function()
         local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
         if not humanoidRootPart then return end
         local originalVelocity = humanoidRootPart.Velocity
+
         local randomOffset = Vector3.new(
             math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
             math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
@@ -866,28 +969,13 @@ velbox:AddSlider("ReverseResolveIntensity", {
 })
 
 RunService.RenderStepped:Connect(function()
-    if ScriptState.isLockedOn and ScriptState.targetPart then
-        local part = ScriptState.targetPart
-        if ScriptState.targetPlayer then
-            if not ScriptState.targetPlayer.Character or not ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid") or ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-            local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
-            part = ScriptState.targetPlayer.Character:FindFirstChild(partName) or part
-        else
-            if not part or not part.Parent then
-                ScriptState.isLockedOn = false
-                ScriptState.targetPlayer = nil
-                ScriptState.targetPart = nil
-                return
-            end
-        end
+    if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
 
-        if part then
+        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
@@ -901,8 +989,12 @@ RunService.RenderStepped:Connect(function()
                     predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
+
             local currentCameraPosition = Camera.CFrame.Position
             Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+        else
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 end)
@@ -969,14 +1061,6 @@ silentAimToggle:AddKeyPicker("silentAim_KeyPicker", {
 
 SilentAimSettings.ToggleKey = Options.silentAim_KeyPicker.Value
 
-Main:AddToggle("SilentAimVehicle", {
-    Text = "Target Vehicles",
-    Default = SilentAimSettings.TargetVehicles,
-    Tooltip = "Aim at vehicles"
-}):OnChanged(function()
-    SilentAimSettings.TargetVehicles = Toggles.SilentAimVehicle.Value
-end)
-
 Main:AddToggle("TeamCheck", {
     Text = "Team Check",
     Default = SilentAimSettings.TeamCheck
@@ -998,6 +1082,14 @@ Main:AddToggle("AliveCheck", {
     Tooltip = "Ignore players with zero health"
 }):OnChanged(function()
     SilentAimSettings.AliveCheck = Toggles.AliveCheck.Value
+end)
+
+Main:AddToggle("TargetVehicles", {
+    Text = "Target Vehicles",
+    Default = SilentAimSettings.TargetVehicles,
+    Tooltip = "Enable targeting War Tycoon vehicles (Tanks, Helis, etc.)"
+}):OnChanged(function()
+    SilentAimSettings.TargetVehicles = Toggles.TargetVehicles.Value
 end)
 
 Main:AddToggle("BulletTP", {
@@ -1164,25 +1256,16 @@ task.spawn(function()
             local teamCheckActive = SilentAimSettings.TeamCheck or ScriptState.aimLockTeamCheck
             local aliveCheckActive = SilentAimSettings.AliveCheck or ScriptState.aimLockAliveCheck
 
-            local closestPart, closestPlayer = getClosestTarget({
-                targetVehicles = SilentAimSettings.TargetVehicles or ScriptState.targetVehicles,
+            local closestPart, closestPlayer = getClosestPlayer({
                 visibleCheck = visibleCheckActive,
                 teamCheck = teamCheckActive,
-                aliveCheck = aliveCheckActive
+                aliveCheck = aliveCheckActive,
+                targetVehicles = SilentAimSettings.TargetVehicles
             })
-            
-            if closestPart then
-                local model = closestPlayer and (closestPlayer.Character or closestPart.Parent) or closestPart.Parent
-                if not closestPlayer then
-                    if closestPart.Parent:IsA("Model") then
-                        model = closestPart.Parent
-                    elseif closestPart.Parent.Parent:IsA("Model") then
-                        model = closestPart.Parent.Parent
-                    end
-                end
-
-                if model then
-                    if closestPlayer then
+            if closestPart and closestPlayer then
+                if closestPlayer:IsA("Player") then
+                    local char = closestPlayer.Character or closestPart.Parent
+                    if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
                         if teamCheckActive and playersOnSameTeam(closestPlayer) then
                             removeOldHighlight()
                             return
@@ -1191,16 +1274,49 @@ task.spawn(function()
                             removeOldHighlight()
                             return
                         end
+                        if SilentAimSettings.VisibleCheck and not IsPlayerVisible(closestPlayer) then
+                            removeOldHighlight()
+                            return
+                        end
+                        local Root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
+                        if Root then
+                            local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                            removeOldHighlight()
+                            if IsOnScreen then
+                                local highlight = char:FindFirstChildOfClass("Highlight")
+                                if not highlight then
+                                    highlight = Instance.new("Highlight")
+                                    highlight.Parent = char
+                                    highlight.Adornee = char
+                                end
+                                highlight.FillColor = Options.MouseVisualizeColor.Value
+                                highlight.FillTransparency = 0.5
+                                highlight.OutlineColor = Options.MouseVisualizeColor.Value
+                                highlight.OutlineTransparency = 0
+                                ScriptState.previousHighlight = highlight
+                            end
+                        end
                     end
-                    
+                else
+                    if visibleCheckActive then
+                        local LocalPlayerCharacter = LocalPlayer.Character
+                        if LocalPlayerCharacter then
+                            local CastPoints = {closestPart.Position, LocalPlayerCharacter, closestPlayer}
+                            local IgnoreList = {LocalPlayerCharacter, closestPlayer}
+                            if #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList) > 0 then
+                                removeOldHighlight()
+                                return
+                            end
+                        end
+                    end
                     local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, closestPart.Position)
                     removeOldHighlight()
                     if IsOnScreen then
-                        local highlight = model:FindFirstChildOfClass("Highlight")
+                        local highlight = closestPlayer:FindFirstChildOfClass("Highlight")
                         if not highlight then
                             highlight = Instance.new("Highlight")
-                            highlight.Parent = model
-                            highlight.Adornee = model
+                            highlight.Parent = closestPlayer
+                            highlight.Adornee = closestPlayer
                         end
                         highlight.FillColor = Options.MouseVisualizeColor.Value
                         highlight.FillTransparency = 0.5
@@ -1220,7 +1336,6 @@ task.spawn(function()
         end
     end)
 end)
-
 local sounds = {
     ["RIFK7"] = "rbxassetid://9102080552",
     ["Bubble"] = "rbxassetid://9102092728",
@@ -1288,9 +1403,7 @@ local function trackPlayer(plr)
 
         hum.HealthChanged:Connect(function(newHp)
             if Toggles.HitSoundEnabled.Value then
-                local closestPart, closestPlayer = getClosestTarget({
-                    targetVehicles = SilentAimSettings.TargetVehicles or ScriptState.targetVehicles
-                })
+                local closestPart, closestPlayer = getClosestPlayer({targetVehicles = false})
                 if closestPart and closestPlayer and closestPlayer == plr then
                     if newHp < lastHealth then
                         playHitSound()
@@ -1312,9 +1425,7 @@ Players.PlayerAdded:Connect(trackPlayer)
 
 RunService.Heartbeat:Connect(function()
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
-        local closestPart = getClosestTarget({
-            targetVehicles = SilentAimSettings.TargetVehicles
-        })
+        local closestPart = getClosestPlayer({targetVehicles = SilentAimSettings.TargetVehicles})
         ScriptState.ClosestHitPart = closestPart
     else
         ScriptState.ClosestHitPart = nil
@@ -1327,24 +1438,36 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
 
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
-    if Method == "Destroy" and self == Client then return end
-    if BlockedMethods[Method] then return end
+    if Method == "Destroy" and self == Client then
+        return
+    end
+    if BlockedMethods[Method] then
+        return
+    end
 
     local function getIgnoredList()
         if Method == "Raycast" then
             local params = Arguments[4]
-            if typeof(params) == "RaycastParams" then return params.FilterDescendantsInstances end
+            if typeof(params) == "RaycastParams" then
+                return params.FilterDescendantsInstances
+            end
         elseif Method == "FindPartOnRayWithIgnoreList" then
             return Arguments[3]
         end
     end
 
     local function getOriginalOrigin()
-        if Method == "Raycast" then return Arguments[2] end
+        if Method == "Raycast" then
+            return Arguments[2]
+        end
+
         if Method == "FindPartOnRayWithIgnoreList" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRay" or Method == "findPartOnRay" then
             local ray = Arguments[2]
-            if typeof(ray) == "Ray" then return ray.Origin end
+            if typeof(ray) == "Ray" then
+                return ray.Origin
+            end
         end
+
         return nil
     end
 
@@ -1359,7 +1482,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     end
 
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
-        local HitPart = ScriptState.ClosestHitPart or getClosestTarget({targetVehicles = SilentAimSettings.TargetVehicles})
+        local HitPart = ScriptState.ClosestHitPart or getClosestPlayer({targetVehicles = SilentAimSettings.TargetVehicles})
         if HitPart then
             local ignoredList = getIgnoredList()
             local originOptions = SilentAimSettings.Origin
@@ -1371,13 +1494,17 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 if isSelectionActive(originOptions, "Camera") and originalOrigin == Camera.CFrame.p then
                     matchesOrigin = true
                 end
-                if not matchesOrigin then return oldNamecall(...) end
+
+                if not matchesOrigin then
+                    return oldNamecall(...)
+                end
             end
 
             if ignoredList and includeOptions and next(includeOptions) then
                 if isSelectionActive(includeOptions, "Camera") and not table.find(ignoredList, Camera) then
                     return oldNamecall(...)
                 end
+
                 local character = LocalPlayer.Character
                 if character and isSelectionActive(includeOptions, "Character") and not table.find(ignoredList, character) then
                     return oldNamecall(...)
@@ -1389,6 +1516,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 if SilentAimSettings.BulletTP then
                     adjustedOrigin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
                 end
+
                 local multiplier = SilentAimSettings.MultiplyUnitBy or 1000
                 local direction = getDirection(adjustedOrigin, HitPart.Position) * multiplier
                 return adjustedOrigin, direction
@@ -1442,6 +1570,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
 end))
 
 local worldbox = VisualsTab:AddRightGroupbox("World")
+
 local lighting = Services.Lighting
 ScriptState.lockedTime, ScriptState.fovValue, ScriptState.nebulaEnabled = 12, 70, false
 local originalAmbient, originalOutdoorAmbient = lighting.Ambient, lighting.OutdoorAmbient
@@ -1452,14 +1581,18 @@ worldbox:AddSlider("world_time", {
     Text = "Clock Time", Default = 12, Min = 0, Max = 24, Rounding = 1,
     Callback = function(v)
         ScriptState.lockedTime = v
-        if ScriptState.lockTimeEnabled then lighting.ClockTime = v end
+        if ScriptState.lockTimeEnabled then
+            lighting.ClockTime = v
+        end
     end
 })
 
 local oldNewIndex
 oldNewIndex = hookmetamethod(game, "__newindex", function(self, property, value)
     if not checkcaller() and self == lighting and property == "ClockTime" then
-        if ScriptState.lockTimeEnabled then value = ScriptState.lockedTime end
+        if ScriptState.lockTimeEnabled then
+            value = ScriptState.lockedTime
+        end
     end
     return oldNewIndex(self, property, value)
 end)
@@ -1470,10 +1603,13 @@ worldbox:AddSlider("fov_slider", {
 })
 
 worldbox:AddToggle("lock_time_toggle", {
-    Text = "Lock Time", Default = false,
+    Text = "Lock Time",
+    Default = false,
     Callback = function(v)
         ScriptState.lockTimeEnabled = v
-        if v then lighting.ClockTime = ScriptState.lockedTime end
+        if v then
+            lighting.ClockTime = ScriptState.lockedTime
+        end
     end
 })
 
@@ -1483,7 +1619,9 @@ worldbox:AddToggle("fov_toggle", {
 })
 
 RunService.RenderStepped:Connect(function()
-    if ScriptState.fovEnabled then Camera.FieldOfView = ScriptState.fovValue end
+    if ScriptState.fovEnabled then
+        Camera.FieldOfView = ScriptState.fovValue
+    end
 end)
 
 worldbox:AddToggle("nebula_theme", {
@@ -1542,45 +1680,177 @@ function Visuals:SwitchSkybox(Name)
     if OldSky then OldSky:Destroy() end
 
     local Sky = Instance.new("Sky", Lighting)
-    for Index, Value in pairs(Skyboxes[Name]) do Sky[Index] = Value end
+    for Index, Value in pairs(Skyboxes[Name]) do
+        Sky[Index] = Value
+    end
 end
 
 if Lighting:FindFirstChildOfClass("Sky") then
     local OldSky = Lighting:FindFirstChildOfClass("Sky")
     Visuals:NewSky({
         Name = "Game's Default Sky",
-        SkyboxBk = OldSky.SkyboxBk, SkyboxDn = OldSky.SkyboxDn,
-        SkyboxFt = OldSky.SkyboxFt, SkyboxLf = OldSky.SkyboxLf,
-        SkyboxRt = OldSky.SkyboxRt, SkyboxUp = OldSky.SkyboxUp
+        SkyboxBk = OldSky.SkyboxBk,
+        SkyboxDn = OldSky.SkyboxDn,
+        SkyboxFt = OldSky.SkyboxFt,
+        SkyboxLf = OldSky.SkyboxLf,
+        SkyboxRt = OldSky.SkyboxRt,
+        SkyboxUp = OldSky.SkyboxUp
     })
 end
 
-Visuals:NewSky({ Name = "Sunset", SkyboxBk = "rbxassetid://600830446", SkyboxDn = "rbxassetid://600831635", SkyboxFt = "rbxassetid://600832720", SkyboxLf = "rbxassetid://600886090", SkyboxRt = "rbxassetid://600833862", SkyboxUp = "rbxassetid://600835177" })
-Visuals:NewSky({ Name = "Arctic", SkyboxBk = "http://www.roblox.com/asset/?id=225469390", SkyboxDn = "http://www.roblox.com/asset/?id=225469395", SkyboxFt = "http://www.roblox.com/asset/?id=225469403", SkyboxLf = "http://www.roblox.com/asset/?id=225469450", SkyboxRt = "http://www.roblox.com/asset/?id=225469471", SkyboxUp = "http://www.roblox.com/asset/?id=225469481" })
-Visuals:NewSky({ Name = "Space", SkyboxBk = "http://www.roblox.com/asset/?id=166509999", SkyboxDn = "http://www.roblox.com/asset/?id=166510057", SkyboxFt = "http://www.roblox.com/asset/?id=166510116", SkyboxLf = "http://www.roblox.com/asset/?id=166510092", SkyboxRt = "http://www.roblox.com/asset/?id=166510131", SkyboxUp = "http://www.roblox.com/asset/?id=166510114" })
-Visuals:NewSky({ Name = "Roblox Default", SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex", SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex", SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex", SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex", SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex", SkyboxUp = "rbxasset://textures/sky/sky512_up.tex" })
-Visuals:NewSky({ Name = "Red Night", SkyboxBk = "http://www.roblox.com/Asset/?ID=401664839", SkyboxDn = "http://www.roblox.com/Asset/?ID=401664862", SkyboxFt = "http://www.roblox.com/Asset/?ID=401664960", SkyboxLf = "http://www.roblox.com/Asset/?ID=401664881", SkyboxRt = "http://www.roblox.com/Asset/?ID=401664901", SkyboxUp = "http://www.roblox.com/Asset/?ID=401664936" })
-Visuals:NewSky({ Name = "Deep Space", SkyboxBk = "http://www.roblox.com/asset/?id=149397692", SkyboxDn = "http://www.roblox.com/asset/?id=149397686", SkyboxFt = "http://www.roblox.com/asset/?id=149397697", SkyboxLf = "http://www.roblox.com/asset/?id=149397684", SkyboxRt = "http://www.roblox.com/asset/?id=149397688", SkyboxUp = "http://www.roblox.com/asset/?id=149397702" })
-Visuals:NewSky({ Name = "Pink Skies", SkyboxBk = "http://www.roblox.com/asset/?id=151165214", SkyboxDn = "http://www.roblox.com/asset/?id=151165197", SkyboxFt = "http://www.roblox.com/asset/?id=151165224", SkyboxLf = "http://www.roblox.com/asset/?id=151165191", SkyboxRt = "http://www.roblox.com/asset/?id=151165206", SkyboxUp = "http://www.roblox.com/asset/?id=151165227" })
-Visuals:NewSky({ Name = "Purple Sunset", SkyboxBk = "rbxassetid://264908339", SkyboxDn = "rbxassetid://264907909", SkyboxFt = "rbxassetid://264909420", SkyboxLf = "rbxassetid://264909758", SkyboxRt = "rbxassetid://264908886", SkyboxUp = "rbxassetid://264907379" })
-Visuals:NewSky({ Name = "Blue Night", SkyboxBk = "http://www.roblox.com/Asset/?ID=12064107", SkyboxDn = "http://www.roblox.com/Asset/?ID=12064152", SkyboxFt = "http://www.roblox.com/Asset/?ID=12064121", SkyboxLf = "http://www.roblox.com/Asset/?ID=12063984", SkyboxRt = "http://www.roblox.com/Asset/?ID=12064115", SkyboxUp = "http://www.roblox.com/Asset/?ID=12064131" })
-Visuals:NewSky({ Name = "Blossom Daylight", SkyboxBk = "http://www.roblox.com/asset/?id=271042516", SkyboxDn = "http://www.roblox.com/asset/?id=271077243", SkyboxFt = "http://www.roblox.com/asset/?id=271042556", SkyboxLf = "http://www.roblox.com/asset/?id=271042310", SkyboxRt = "http://www.roblox.com/asset/?id=271042467", SkyboxUp = "http://www.roblox.com/asset/?id=271077958" })
-Visuals:NewSky({ Name = "Blue Nebula", SkyboxBk = "http://www.roblox.com/asset?id=135207744", SkyboxDn = "http://www.roblox.com/asset?id=135207662", SkyboxFt = "http://www.roblox.com/asset?id=135207770", SkyboxLf = "http://www.roblox.com/asset?id=135207615", SkyboxRt = "http://www.roblox.com/asset?id=135207695", SkyboxUp = "http://www.roblox.com/asset?id=135207794" })
-Visuals:NewSky({ Name = "Blue Planet", SkyboxBk = "rbxassetid://218955819", SkyboxDn = "rbxassetid://218953419", SkyboxFt = "rbxassetid://218954524", SkyboxLf = "rbxassetid://218958493", SkyboxRt = "rbxassetid://218957134", SkyboxUp = "rbxassetid://218950090" })
-Visuals:NewSky({ Name = "Deep Space", SkyboxBk = "http://www.roblox.com/asset/?id=159248188", SkyboxDn = "http://www.roblox.com/asset/?id=159248183", SkyboxFt = "http://www.roblox.com/asset/?id=159248187", SkyboxLf = "http://www.roblox.com/asset/?id=159248173", SkyboxRt = "http://www.roblox.com/asset/?id=159248192", SkyboxUp = "http://www.roblox.com/asset/?id=159248176" })
+Visuals:NewSky({
+    Name = "Sunset",
+    SkyboxBk = "rbxassetid://600830446",
+    SkyboxDn = "rbxassetid://600831635",
+    SkyboxFt = "rbxassetid://600832720",
+    SkyboxLf = "rbxassetid://600886090",
+    SkyboxRt = "rbxassetid://600833862",
+    SkyboxUp = "rbxassetid://600835177"
+})
+
+Visuals:NewSky({
+    Name = "Arctic",
+    SkyboxBk = "http://www.roblox.com/asset/?id=225469390",
+    SkyboxDn = "http://www.roblox.com/asset/?id=225469395",
+    SkyboxFt = "http://www.roblox.com/asset/?id=225469403",
+    SkyboxLf = "http://www.roblox.com/asset/?id=225469450",
+    SkyboxRt = "http://www.roblox.com/asset/?id=225469471",
+    SkyboxUp = "http://www.roblox.com/asset/?id=225469481"
+})
+
+Visuals:NewSky({
+    Name = "Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=166509999",
+    SkyboxDn = "http://www.roblox.com/asset/?id=166510057",
+    SkyboxFt = "http://www.roblox.com/asset/?id=166510116",
+    SkyboxLf = "http://www.roblox.com/asset/?id=166510092",
+    SkyboxRt = "http://www.roblox.com/asset/?id=166510131",
+    SkyboxUp = "http://www.roblox.com/asset/?id=166510114"
+})
+
+Visuals:NewSky({
+    Name = "Roblox Default",
+    SkyboxBk = "rbxasset://textures/sky/sky512_bk.tex",
+    SkyboxDn = "rbxasset://textures/sky/sky512_dn.tex",
+    SkyboxFt = "rbxasset://textures/sky/sky512_ft.tex",
+    SkyboxLf = "rbxasset://textures/sky/sky512_lf.tex",
+    SkyboxRt = "rbxasset://textures/sky/sky512_rt.tex",
+    SkyboxUp = "rbxasset://textures/sky/sky512_up.tex"
+})
+
+Visuals:NewSky({
+    Name = "Red Night",
+    SkyboxBk = "http://www.roblox.com/Asset/?ID=401664839";
+    SkyboxDn = "http://www.roblox.com/Asset/?ID=401664862";
+    SkyboxFt = "http://www.roblox.com/Asset/?ID=401664960";
+    SkyboxLf = "http://www.roblox.com/Asset/?ID=401664881";
+    SkyboxRt = "http://www.roblox.com/Asset/?ID=401664901";
+    SkyboxUp = "http://www.roblox.com/Asset/?ID=401664936";
+})
+
+Visuals:NewSky({
+    Name = "Deep Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=149397692";
+    SkyboxDn = "http://www.roblox.com/asset/?id=149397686";
+    SkyboxFt = "http://www.roblox.com/asset/?id=149397697";
+    SkyboxLf = "http://www.roblox.com/asset/?id=149397684";
+    SkyboxRt = "http://www.roblox.com/asset/?id=149397688";
+    SkyboxUp = "http://www.roblox.com/asset/?id=149397702";
+})
+
+Visuals:NewSky({
+    Name = "Pink Skies",
+    SkyboxBk = "http://www.roblox.com/asset/?id=151165214";
+    SkyboxDn = "http://www.roblox.com/asset/?id=151165197";
+    SkyboxFt = "http://www.roblox.com/asset/?id=151165224";
+    SkyboxLf = "http://www.roblox.com/asset/?id=151165191";
+    SkyboxRt = "http://www.roblox.com/asset/?id=151165206";
+    SkyboxUp = "http://www.roblox.com/asset/?id=151165227";
+})
+
+Visuals:NewSky({
+    Name = "Purple Sunset",
+    SkyboxBk = "rbxassetid://264908339";
+    SkyboxDn = "rbxassetid://264907909";
+    SkyboxFt = "rbxassetid://264909420";
+    SkyboxLf = "rbxassetid://264909758";
+    SkyboxRt = "rbxassetid://264908886";
+    SkyboxUp = "rbxassetid://264907379";
+})
+
+Visuals:NewSky({
+    Name = "Blue Night",
+    SkyboxBk = "http://www.roblox.com/Asset/?ID=12064107";
+    SkyboxDn = "http://www.roblox.com/Asset/?ID=12064152";
+    SkyboxFt = "http://www.roblox.com/Asset/?ID=12064121";
+    SkyboxLf = "http://www.roblox.com/Asset/?ID=12063984";
+    SkyboxRt = "http://www.roblox.com/Asset/?ID=12064115";
+    SkyboxUp = "http://www.roblox.com/Asset/?ID=12064131";
+})
+
+Visuals:NewSky({
+    Name = "Blossom Daylight",
+    SkyboxBk = "http://www.roblox.com/asset/?id=271042516";
+    SkyboxDn = "http://www.roblox.com/asset/?id=271077243";
+    SkyboxFt = "http://www.roblox.com/asset/?id=271042556";
+    SkyboxLf = "http://www.roblox.com/asset/?id=271042310";
+    SkyboxRt = "http://www.roblox.com/asset/?id=271042467";
+    SkyboxUp = "http://www.roblox.com/asset/?id=271077958";
+})
+
+Visuals:NewSky({
+    Name = "Blue Nebula",
+    SkyboxBk = "http://www.roblox.com/asset?id=135207744";
+    SkyboxDn = "http://www.roblox.com/asset?id=135207662";
+    SkyboxFt = "http://www.roblox.com/asset?id=135207770";
+    SkyboxLf = "http://www.roblox.com/asset?id=135207615";
+    SkyboxRt = "http://www.roblox.com/asset?id=135207695";
+    SkyboxUp = "http://www.roblox.com/asset?id=135207794";
+})
+
+Visuals:NewSky({
+    Name = "Blue Planet",
+    SkyboxBk = "rbxassetid://218955819";
+    SkyboxDn = "rbxassetid://218953419";
+    SkyboxFt = "rbxassetid://218954524";
+    SkyboxLf = "rbxassetid://218958493";
+    SkyboxRt = "rbxassetid://218957134";
+    SkyboxUp = "rbxassetid://218950090";
+})
+
+Visuals:NewSky({
+    Name = "Deep Space",
+    SkyboxBk = "http://www.roblox.com/asset/?id=159248188";
+    SkyboxDn = "http://www.roblox.com/asset/?id=159248183";
+    SkyboxFt = "http://www.roblox.com/asset/?id=159248187";
+    SkyboxLf = "http://www.roblox.com/asset/?id=159248173";
+    SkyboxRt = "http://www.roblox.com/asset/?id=159248192";
+    SkyboxUp = "http://www.roblox.com/asset/?id=159248176";
+})
 
 local SkyboxNames = {}
-for Name, _ in pairs(Skyboxes) do table.insert(SkyboxNames, Name) end
+for Name, _ in pairs(Skyboxes) do
+    table.insert(SkyboxNames, Name)
+end
 
 local worldbox = VisualsTab:AddRightGroupbox("SkyBox")
 local SkyboxDropdown = worldbox:AddDropdown("SkyboxSelector", {
-    AllowNull = false, Text = "Select Skybox", Default = "Game's Default Sky", Values = SkyboxNames
+    AllowNull = false,
+    Text = "Select Skybox",
+    Default = "Game's Default Sky",
+    Values = SkyboxNames
 }):OnChanged(function(SelectedSkybox)
-    if Skyboxes[SelectedSkybox] then Visuals:SwitchSkybox(SelectedSkybox) end
+    if Skyboxes[SelectedSkybox] then
+        Visuals:SwitchSkybox(SelectedSkybox)
+    end
 end)
 
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
-if not _G.ExunysESPLoaded then loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))() end
+
+if not _G.ExunysESPLoaded then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
+end
+
 local ESP = getgenv().ExunysDeveloperESP
 if not ESP then return end
 
@@ -1588,7 +1858,9 @@ local function ensurePath(path)
     local ref = ESP
     for index = 1, #path - 1 do
         local key = path[index]
-        if type(ref[key]) ~= "table" then ref[key] = {} end
+        if type(ref[key]) ~= "table" then
+            ref[key] = {}
+        end
         ref = ref[key]
     end
     return ref, path[#path]
@@ -1605,88 +1877,168 @@ end
 
 local function updateProperty(path, value)
     local ref, key = ensurePath(path)
-    if ref and key then ref[key] = value end
+    if ref and key then
+        ref[key] = value
+    end
 end
 
 local function makeId(path, suffix)
     local id = table.concat(path, "_")
-    if suffix then id = id .. "_" .. suffix end
+    if suffix then
+        id = id .. "_" .. suffix
+    end
     return id
 end
 
 local function refreshESPConfiguration()
     if ESP and ESP.UpdateConfiguration then
-        pcall(function() ESP.UpdateConfiguration(ESP.DeveloperSettings, ESP.Settings, ESP.Properties) end)
+        pcall(function()
+            ESP.UpdateConfiguration(ESP.DeveloperSettings, ESP.Settings, ESP.Properties)
+        end)
     end
 end
 
 local function refreshChams()
-    if UpdateAllChams then pcall(UpdateAllChams) end
+    if UpdateAllChams then
+        pcall(UpdateAllChams)
+    end
 end
 
 local function addDefinitionControls(group, definitions)
     for _, def in ipairs(definitions) do
-        local getValue = def.Get or function() return getProperty(def.Path) end
-        local setValue = def.Set or function(value) updateProperty(def.Path, value) end
+        local getValue = def.Get or function()
+            return getProperty(def.Path)
+        end
+
+        local setValue = def.Set or function(value)
+            updateProperty(def.Path, value)
+        end
+
         local id = def.Id or makeId(def.Path, def.Suffix)
 
         if def.Type == "toggle" then
-            group:AddToggle(id, { Text = def.Name, Default = def.Default ~= nil and def.Default or (getValue() or false), Callback = function(val) setValue(val) if def.OnChange then def.OnChange(val) end end })
+            group:AddToggle(id, {
+                Text = def.Name,
+                Default = def.Default ~= nil and def.Default or (getValue() or false),
+                Callback = function(val)
+                    setValue(val)
+                    if def.OnChange then def.OnChange(val) end
+                end
+            })
         elseif def.Type == "slider" then
-            group:AddSlider(id, { Text = def.Name, Min = def.Min, Max = def.Max, Rounding = def.Rounding or 1, Default = getValue() or def.Default or def.Min or 0, Callback = function(val) setValue(val) if def.OnChange then def.OnChange(val) end end })
+            group:AddSlider(id, {
+                Text = def.Name,
+                Min = def.Min,
+                Max = def.Max,
+                Rounding = def.Rounding or 1,
+                Default = getValue() or def.Default or def.Min or 0,
+                Callback = function(val)
+                    setValue(val)
+                    if def.OnChange then def.OnChange(val) end
+                end
+            })
         elseif def.Type == "color" then
             local label = group:AddLabel(def.Name)
-            label:AddColorPicker(id, { Default = getValue() or def.Default or Color3.new(1, 1, 1), Callback = function(val) setValue(val) if def.OnChange then def.OnChange(val) end end })
+            label:AddColorPicker(id, {
+                Default = getValue() or def.Default or Color3.new(1, 1, 1),
+                Callback = function(val)
+                    setValue(val)
+                    if def.OnChange then def.OnChange(val) end
+                end
+            })
         elseif def.Type == "dropdown" then
             local values = def.Values
             if not values and def.Map then
                 values = {}
-                for option in pairs(def.Map) do table.insert(values, option) end
+                for option in pairs(def.Map) do
+                    table.insert(values, option)
+                end
                 table.sort(values)
             end
+
             local current = getValue()
             if def.Map then
                 local mapped
                 for option, mappedValue in pairs(def.Map) do
-                    if mappedValue == current then mapped = option break end
+                    if mappedValue == current then
+                        mapped = option
+                        break
+                    end
                 end
                 current = mapped
             end
-            local dropdown = group:AddDropdown(id, { AllowNull = false, Text = def.Name, Values = values, Default = current or def.Default or (values and values[1]) })
+
+            local dropdown = group:AddDropdown(id, {
+                AllowNull = false,
+                Text = def.Name,
+                Values = values,
+                Default = current or def.Default or (values and values[1])
+            })
+
             dropdown:OnChanged(function(value)
                 local finalValue = def.Map and def.Map[value] or value
                 setValue(finalValue)
                 if def.OnChange then def.OnChange(finalValue, value) end
             end)
         elseif def.Type == "input" then
-            group:AddInput(id, { Text = def.Name, Default = tostring(getValue() or def.Default or ""), Numeric = def.Numeric, Finished = def.Finished, Placeholder = def.Placeholder, Callback = function(val) local finalValue = def.Numeric and tonumber(val) or val setValue(finalValue) if def.OnChange then def.OnChange(finalValue) end end })
+            group:AddInput(id, {
+                Text = def.Name,
+                Default = tostring(getValue() or def.Default or ""),
+                Numeric = def.Numeric,
+                Finished = def.Finished,
+                Placeholder = def.Placeholder,
+                Callback = function(val)
+                    local finalValue = def.Numeric and tonumber(val) or val
+                    setValue(finalValue)
+                    if def.OnChange then def.OnChange(finalValue) end
+                end
+            })
         end
     end
 end
 
 VisualsEx:AddToggle("espEnabled", {
-    Text = "Enable ESP", Default = ESP.Settings and ESP.Settings.Enabled or false,
+    Text = "Enable ESP",
+    Default = ESP.Settings and ESP.Settings.Enabled or false,
     Callback = function(value)
-        if value and ESP and not ESP.Loaded and ESP.Load then pcall(function() ESP:Load() end) end
+        if value and ESP and not ESP.Loaded and ESP.Load then
+            pcall(function()
+                ESP:Load()
+            end)
+        end
+
         updateProperty({"Settings", "Enabled"}, value)
         refreshESPConfiguration()
     end
 })
 
 local DrawingFonts = Drawing and Drawing.Fonts
-local fontMap = { Plex = DrawingFonts and DrawingFonts.Plex or "Plex", System = DrawingFonts and DrawingFonts.System or "System", UI = DrawingFonts and DrawingFonts.UI or "UI", Monospace = DrawingFonts and DrawingFonts.Monospace or "Monospace" }
+local fontMap = {
+    Plex = DrawingFonts and DrawingFonts.Plex or "Plex",
+    System = DrawingFonts and DrawingFonts.System or "System",
+    UI = DrawingFonts and DrawingFonts.UI or "UI",
+    Monospace = DrawingFonts and DrawingFonts.Monospace or "Monospace"
+}
 local fontValues = {"Plex", "System", "UI", "Monospace"}
+
 local tracerPositionMap = {Bottom = 1, Center = 2, Mouse = 3}
 local tracerPositions = {"Bottom", "Center", "Mouse"}
+
 local healthBarPositionMap = {Top = 1, Bottom = 2, Left = 3, Right = 4}
 local healthBarPositions = {"Top", "Bottom", "Left", "Right"}
 
 local ESPSettingsGroup = VisualsTab:AddRightGroupbox("ESP Settings")
 addDefinitionControls(ESPSettingsGroup, {
     {Type = "toggle", Name = "Parts Only", Path = {"Settings", "PartsOnly"}},
-    {Type = "toggle", Name = "Team Check", Path = {"Settings", "TeamCheck"}, OnChange = function() refreshESPConfiguration() refreshChams() end},
+    {Type = "toggle", Name = "Team Check", Path = {"Settings", "TeamCheck"}, OnChange = function()
+        refreshESPConfiguration()
+        refreshChams()
+    end},
     {Type = "toggle", Name = "Alive Check", Path = {"Settings", "AliveCheck"}, OnChange = refreshESPConfiguration},
-    {Type = "toggle", Name = "Enable Team Colors", Path = {"Settings", "EnableTeamColors"}, OnChange = function() refreshESPConfiguration() refreshChams() end},
+    {Type = "toggle", Name = "Enable Team Colors", Path = {"Settings", "EnableTeamColors"}, OnChange = function()
+        refreshESPConfiguration()
+        refreshChams()
+    end},
     {Type = "toggle", Name = "Entity ESP", Path = {"Settings", "EntityESP"}}
 })
 
@@ -1782,12 +2134,14 @@ local function HSVToRGB(h, s, v)
     local x = c * (1 - math.abs((h / 60) % 2 - 1))
     local m = v - c
     local r, g, b = 0, 0, 0
+
     if h < 60 then r, g, b = c, x, 0
     elseif h < 120 then r, g, b = x, c, 0
     elseif h < 180 then r, g, b = 0, c, x
     elseif h < 240 then r, g, b = 0, x, c
     elseif h < 300 then r, g, b = x, 0, c
     else r, g, b = c, 0, x end
+
     return Color3.new(r + m, g + m, b + m)
 end
 
@@ -1796,7 +2150,10 @@ local function applyChams(char)
     originalProperties = {}
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-            originalProperties[part] = { Color = part.Color, Material = part.Material }
+            originalProperties[part] = {
+                Color = part.Color,
+                Material = part.Material
+            }
             part.Material = Enum.Material.ForceField
             part.Color = ScriptState.SelfChamsColor
         end
@@ -1805,7 +2162,10 @@ end
 
 local function restoreChams()
     for part, props in pairs(originalProperties) do
-        if part and part.Parent then part.Color = props.Color part.Material = props.Material end
+        if part and part.Parent then
+            part.Color = props.Color
+            part.Material = props.Material
+        end
     end
     originalProperties = {}
 end
@@ -1834,24 +2194,38 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 VisualsEx:AddToggle("selfChamsEnabled", {
-    Text = "Self Chams", Default = false,
+    Text = "Self Chams",
+    Default = false,
     Callback = function(val)
         ScriptState.SelfChamsEnabled = val
-        if val then if LocalPlayer.Character then applyChams(LocalPlayer.Character) end else restoreChams() end
+        if val then
+            if LocalPlayer.Character then
+                applyChams(LocalPlayer.Character)
+            end
+        else
+            restoreChams()
+        end
     end
 })
 
 VisualsEx:AddToggle("rainbowChams", {
-    Text = "Rainbow Chams", Default = false,
-    Callback = function(val) ScriptState.RainbowChamsEnabled = val end
+    Text = "Rainbow Chams",
+    Default = false,
+    Callback = function(val)
+        ScriptState.RainbowChamsEnabled = val
+    end
 })
 
 VisualsEx:AddLabel("Self Chams Color"):AddColorPicker("selfChamsColor", {
-    Default = ScriptState.SelfChamsColor, Callback = function(val) ScriptState.SelfChamsColor = val end
+    Default = ScriptState.SelfChamsColor,
+    Callback = function(val)
+        ScriptState.SelfChamsColor = val
+    end
 })
 
 local ChamsOccludedColor = {Color3.fromRGB(128, 0, 128), 0.7}
 local ChamsVisibleColor = {Color3.fromRGB(255, 0, 255), 0.3}
+
 local AdornmentsCache = {}
 local IgnoreNames = {["HumanoidRootPart"] = true}
 
@@ -1866,7 +2240,8 @@ local function CreateAdornment(part, isHead, vis)
         local offset = vis == 1 and -0.05 or 0.05
         adorn.Size = part.Size + Vector3.new(offset, offset, offset)
     end
-    adorn.Adornee = part adorn.Parent = part
+    adorn.Adornee = part
+    adorn.Parent = part
     adorn.ZIndex = vis == 1 and 2 or 1
     adorn.AlwaysOnTop = vis == 1
     adorn.Visible = false
@@ -1874,7 +2249,9 @@ local function CreateAdornment(part, isHead, vis)
 end
 
 local function IsEnemy(player)
-    if ESP and ESP.Settings and ESP.Settings.TeamCheck then return player.Team ~= LocalPlayer.Team end
+    if ESP and ESP.Settings and ESP.Settings.TeamCheck then
+        return player.Team ~= LocalPlayer.Team
+    end
     return true
 end
 
@@ -1882,84 +2259,236 @@ local function ApplyChams(player)
     if player ~= LocalPlayer and player.Character then
         for _, part in pairs(player.Character:GetChildren()) do
             if part:IsA("BasePart") and not IgnoreNames[part.Name] then
-                if not AdornmentsCache[part] then AdornmentsCache[part] = {CreateAdornment(part, part.Name=="Head", 1), CreateAdornment(part, part.Name=="Head", 2)} end
+                if not AdornmentsCache[part] then
+                    AdornmentsCache[part] = {
+                        CreateAdornment(part, part.Name=="Head", 1),
+                        CreateAdornment(part, part.Name=="Head", 2)
+                    }
+                end
                 local ad = AdornmentsCache[part]
                 local visible = ScriptState.ChamsEnabled and IsEnemy(player)
-                ad[1].Visible = visible ad[1].Color3 = ChamsOccludedColor[1] ad[1].Transparency = ChamsOccludedColor[2]
-                ad[2].Visible = visible ad[2].AlwaysOnTop = true ad[2].ZIndex = 9e9 ad[2].Color3 = ChamsVisibleColor[1] ad[2].Transparency = ChamsVisibleColor[2]
+
+                ad[1].Visible = visible
+                ad[1].Color3 = ChamsOccludedColor[1]
+                ad[1].Transparency = ChamsOccludedColor[2]
+
+                ad[2].Visible = visible
+                ad[2].AlwaysOnTop = true
+                ad[2].ZIndex = 9e9
+                ad[2].Color3 = ChamsVisibleColor[1]
+                ad[2].Transparency = ChamsVisibleColor[2]
             end
         end
     end
 end
 
 local function UpdateAllChams()
-    for _, player in pairs(Players:GetPlayers()) do ApplyChams(player) end
+    for _, player in pairs(Players:GetPlayers()) do
+        ApplyChams(player)
+    end
 end
 
 local function TrackPlayer(player)
     player:GetPropertyChangedSignal("Team"):Connect(function()
         if AdornmentsCache[player] then
-            for _, ad in pairs(AdornmentsCache[player]) do ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player) end
+            for _, ad in pairs(AdornmentsCache[player]) do
+                ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+            end
         end
     end)
 end
 
 Players.PlayerAdded:Connect(TrackPlayer)
 for _, plr in pairs(Players:GetPlayers()) do
-    if plr ~= LocalPlayer then TrackPlayer(plr) end
+    if plr ~= LocalPlayer then
+        TrackPlayer(plr)
+    end
 end
 
 RunService.RenderStepped:Connect(UpdateAllChams)
 
 VisualsEx:AddToggle("chamsEnabled", {
-    Text = "Chams", Default = ScriptState.ChamsEnabled,
-    Callback = function(val) ScriptState.ChamsEnabled = val for part, ad in pairs(AdornmentsCache) do ad[1].Visible = val ad[2].Visible = val end end
+    Text = "Chams",
+    Default = ScriptState.ChamsEnabled,
+    Callback = function(val)
+        ScriptState.ChamsEnabled = val
+        for part, ad in pairs(AdornmentsCache) do
+            ad[1].Visible = val
+            ad[2].Visible = val
+        end
+    end
 })
 
-VisualsEx:AddLabel("Chams Occluded Color"):AddColorPicker("chamsOccludedColor", { Default = ChamsOccludedColor[1], Callback = function(val) ChamsOccludedColor[1] = val end })
-VisualsEx:AddLabel("Chams Visible Color"):AddColorPicker("chamsVisibleColor", { Default = ChamsVisibleColor[1], Callback = function(val) ChamsVisibleColor[1] = val end })
-VisualsEx:AddSlider("chamsOccludedTransparency", { Text = "Occluded Transparency", Default = ChamsOccludedColor[2], Min = 0, Max = 1, Rounding = 2, Callback = function(val) ChamsOccludedColor[2] = val end })
-VisualsEx:AddSlider("chamsVisibleTransparency", { Text = "Visible Transparency", Default = ChamsVisibleColor[2], Min = 0, Max = 1, Rounding = 2, Callback = function(val) ChamsVisibleColor[2] = val end })
+VisualsEx:AddLabel("Chams Occluded Color"):AddColorPicker("chamsOccludedColor", {
+    Default = ChamsOccludedColor[1],
+    Callback = function(val)
+        ChamsOccludedColor[1] = val
+    end
+})
+
+VisualsEx:AddLabel("Chams Visible Color"):AddColorPicker("chamsVisibleColor", {
+    Default = ChamsVisibleColor[1],
+    Callback = function(val)
+        ChamsVisibleColor[1] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsOccludedTransparency", {
+    Text = "Occluded Transparency",
+    Default = ChamsOccludedColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsOccludedColor[2] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsVisibleTransparency", {
+    Text = "Visible Transparency",
+    Default = ChamsVisibleColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsVisibleColor[2] = val
+    end
+})
 
 local humanoid = nil
 
-frabox:AddToggle("speedEnabled", { Text = "Speed Toggle", Default = false, Tooltip = "It makes you go fast.", Callback = function(value) ScriptState.isSpeedActive = value end }):AddKeyPicker("speedToggleKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Speed Toggle Key", Tooltip = "CFrame keybind.", Callback = function(value) ScriptState.isSpeedActive = value end })
-frabox:AddSlider("cframespeed", { Text = "CFrame Multiplier", Default = 1, Min = 1, Max = 20, Rounding = 1, Tooltip = "The CFrame speed.", Callback = function(value) ScriptState.Cmultiplier = value end, })
-frabox:AddToggle("flyEnabled", { Text = "CFly Toggle", Default = false, Tooltip = "Toggle CFrame Fly functionality.", Callback = function(value) ScriptState.isFlyActive = value end }):AddKeyPicker("flyToggleKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "CFly Toggle Key", Tooltip = "CFrame Fly keybind.", Callback = function(value) ScriptState.isFlyActive = value end })
-frabox:AddSlider("flySpeed", { Text = "CFly Speed", Default = 1, Min = 1, Max = 50, Rounding = 1, Tooltip = "The CFrame Fly speed.", Callback = function(value) ScriptState.flySpeed = value end, })
-frabox:AddToggle("noClipEnabled", { Text = "NoClip Toggle", Default = false, Tooltip = "Enable or disable NoClip.", Callback = function(value) ScriptState.isNoClipActive = value end }):AddKeyPicker("noClipToggleKey", { Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "NoClip Toggle Key", Tooltip = "Keybind to toggle NoClip.", Callback = function(value) ScriptState.isNoClipActive = value end })
+frabox:AddToggle("speedEnabled", {
+    Text = "Speed Toggle",
+    Default = false,
+    Tooltip = "It makes you go fast.",
+    Callback = function(value)
+        ScriptState.isSpeedActive = value
+    end
+}):AddKeyPicker("speedToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Speed Toggle Key",
+    Tooltip = "CFrame keybind.",
+    Callback = function(value)
+        ScriptState.isSpeedActive = value
+    end
+})
+
+frabox:AddSlider("cframespeed", {
+    Text = "CFrame Multiplier",
+    Default = 1,
+    Min = 1,
+    Max = 20,
+    Rounding = 1,
+    Tooltip = "The CFrame speed.",
+    Callback = function(value)
+        ScriptState.Cmultiplier = value
+    end,
+})
+
+frabox:AddToggle("flyEnabled", {
+    Text = "CFly Toggle",
+    Default = false,
+    Tooltip = "Toggle CFrame Fly functionality.",
+    Callback = function(value)
+        ScriptState.isFlyActive = value
+    end
+}):AddKeyPicker("flyToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "CFly Toggle Key",
+    Tooltip = "CFrame Fly keybind.",
+    Callback = function(value)
+        ScriptState.isFlyActive = value
+    end
+})
+
+frabox:AddSlider("flySpeed", {
+    Text = "CFly Speed",
+    Default = 1,
+    Min = 1,
+    Max = 50,
+    Rounding = 1,
+    Tooltip = "The CFrame Fly speed.",
+    Callback = function(value)
+        ScriptState.flySpeed = value
+    end,
+})
+
+frabox:AddToggle("noClipEnabled", {
+    Text = "NoClip Toggle",
+    Default = false,
+    Tooltip = "Enable or disable NoClip.",
+    Callback = function(value)
+        ScriptState.isNoClipActive = value
+    end
+}):AddKeyPicker("noClipToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "NoClip Toggle Key",
+    Tooltip = "Keybind to toggle NoClip.",
+    Callback = function(value)
+        ScriptState.isNoClipActive = value
+    end
+})
 
 getgenv().WeaponOnHands = getgenv().WeaponOnHands or false
 getgenv().WeaponModifyMethod = getgenv().WeaponModifyMethod or "Attribute"
 
 local function findSettingsModuleForWeapon(weapon, property)
-    if not (weapon and weapon:IsA("Tool")) then return nil end
+    if not (weapon and weapon:IsA("Tool")) then
+        return nil
+    end
+
     local function moduleSupportsProperty(moduleScript)
         local success, module = pcall(require, moduleScript)
-        if success and type(module) == "table" and module[property] ~= nil then return true end
+        if success and type(module) == "table" and module[property] ~= nil then
+            return true
+        end
         return false
     end
+
     for _, moduleScript in ipairs(weapon:GetDescendants()) do
-        if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then return moduleScript end
+        if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then
+            return moduleScript
+        end
     end
+
     local weaponName = weapon.Name
     local searchFolders = {}
+
     local configurations = ReplicatedStorage:FindFirstChild("Configurations")
-    if configurations then table.insert(searchFolders, configurations) end
+    if configurations then
+        table.insert(searchFolders, configurations)
+    end
+
     local acsFolder = ReplicatedStorage:FindFirstChild("ACS_Guns", true)
-    if acsFolder then table.insert(searchFolders, acsFolder) end
+    if acsFolder then
+        table.insert(searchFolders, acsFolder)
+    end
+
     table.insert(searchFolders, ReplicatedStorage)
+
     for _, container in ipairs(searchFolders) do
         if typeof(container) == "Instance" then
             local candidate = container:FindFirstChild(weaponName, true)
             if candidate then
-                if candidate:IsA("ModuleScript") and moduleSupportsProperty(candidate) then return candidate end
+                if candidate:IsA("ModuleScript") and moduleSupportsProperty(candidate) then
+                    return candidate
+                end
+
                 for _, moduleScript in ipairs(candidate:GetDescendants()) do
-                    if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then return moduleScript end
+                    if moduleScript:IsA("ModuleScript") and moduleSupportsProperty(moduleScript) then
+                        return moduleScript
+                    end
                 end
             end
         end
     end
+
     return nil
 end
 
@@ -1967,62 +2496,160 @@ local function modifyWeaponSettings(property, value)
     local player = Players.LocalPlayer
     local backpack = player:WaitForChild("Backpack")
     local character = player.Character or player.CharacterAdded:Wait()
+
     local function applyAttribute(weapon)
-        if weapon and weapon:IsA("Tool") then pcall(function() weapon:SetAttribute(property, value) end) end
+        if weapon and weapon:IsA("Tool") then
+            pcall(function()
+                weapon:SetAttribute(property, value)
+            end)
+        end
     end
+
     local function applyRequireModule(weapon)
         local settingsModule = findSettingsModuleForWeapon(weapon, property)
         if settingsModule then
             local success, module = pcall(require, settingsModule)
-            if success and type(module) == "table" and module[property] ~= nil then module[property] = value end
+            if success and type(module) == "table" and module[property] ~= nil then
+                module[property] = value
+            end
         end
     end
+
     local function processWeapon(weapon)
-        if not (weapon and weapon:IsA("Tool")) then return end
-        if (getgenv().WeaponModifyMethod or "Attribute") == "Attribute" then applyAttribute(weapon) else applyRequireModule(weapon) end
+        if not (weapon and weapon:IsA("Tool")) then
+            return
+        end
+
+        if (getgenv().WeaponModifyMethod or "Attribute") == "Attribute" then
+            applyAttribute(weapon)
+        else
+            applyRequireModule(weapon)
+        end
     end
+
     local handledEquippedWeapon = false
+
     if getgenv().WeaponOnHands then
         local toolInHand = character:FindFirstChildOfClass("Tool")
-        if toolInHand then processWeapon(toolInHand) handledEquippedWeapon = true end
+        if toolInHand then
+            processWeapon(toolInHand)
+            handledEquippedWeapon = true
+        end
     end
+
     if not handledEquippedWeapon then
-        for _, item in ipairs(backpack:GetChildren()) do processWeapon(item) end
+        for _, item in ipairs(backpack:GetChildren()) do
+            processWeapon(item)
+        end
+
         local equippedTool = character:FindFirstChildOfClass("Tool")
-        if equippedTool and equippedTool.Parent ~= backpack then processWeapon(equippedTool) end
+        if equippedTool and equippedTool.Parent ~= backpack then
+            processWeapon(equippedTool)
+        end
     end
 end
 
-ACSEngineBox:AddToggle("WeaponOnHands", { Text = "Weapon In Hands", Default = false, Tooltip = "Apply changes only to the weapon in hands if enabled.", Callback = function(value) getgenv().WeaponOnHands = value end })
-ACSEngineBox:AddDropdown("WeaponModifyMethod", { Text = "Weapon Modify Method", Default = "Attribute", Values = {"Attribute", "Require"}, Tooltip = "Choose how to modify weapon settings", Callback = function(value) getgenv().WeaponModifyMethod = value end })
-ACSEngineBox:AddButton('INF AMMO', function() modifyWeaponSettings("Ammo", math.huge) end)
-ACSEngineBox:AddButton('NO RECOIL | NO SPREAD', function()
-    if getgenv().WeaponModifyMethod == "Attribute" then modifyWeaponSettings("VRecoil", Vector2.new(0, 0)) modifyWeaponSettings("HRecoil", Vector2.new(0, 0)) else modifyWeaponSettings("VRecoil", {0, 0}) modifyWeaponSettings("HRecoil", {0, 0}) end
-    modifyWeaponSettings("MinSpread", 0) modifyWeaponSettings("MaxSpread", 0) modifyWeaponSettings("RecoilPunch", 0) modifyWeaponSettings("AimRecoilReduction", 0)
+ACSEngineBox:AddToggle("WeaponOnHands", {
+    Text = "Weapon In Hands",
+    Default = false,
+    Tooltip = "Apply changes only to the weapon in hands if enabled.",
+    Callback = function(value)
+        getgenv().WeaponOnHands = value
+    end
+})
+
+ACSEngineBox:AddDropdown("WeaponModifyMethod", {
+    Text = "Weapon Modify Method",
+    Default = "Attribute",
+    Values = {"Attribute", "Require"},
+    Tooltip = "Choose how to modify weapon settings",
+    Callback = function(value)
+        getgenv().WeaponModifyMethod = value
+    end
+})
+
+ACSEngineBox:AddButton('INF AMMO', function()
+    modifyWeaponSettings("Ammo", math.huge)
 end)
-ACSEngineBox:AddButton('INF BULLET DISTANCE', function() modifyWeaponSettings("Distance", 25000) end)
-ACSEngineBox:AddInput("BulletSpeedInput", { Text = "Bullet Speed", Default = "10000", Tooltip = "Set the bullet speed", Callback = function(value) getgenv().bulletSpeedValue = tonumber(value) or 10000 end })
-ACSEngineBox:AddButton('CHANGE BULLET SPEED', function() modifyWeaponSettings("BSpeed", getgenv().bulletSpeedValue or 10000) modifyWeaponSettings("MuzzleVelocity", getgenv().bulletSpeedValue or 10000) end)
-local fireRateInput = ACSEngineBox:AddInput('FireRateInput', { Text = 'Enter Fire Rate', Default = '8888', Tooltip = 'Type the fire rate value you want to apply.', })
-ACSEngineBox:AddButton('CHANGE FIRE RATE', function() local rate = tonumber(fireRateInput.Value) or 8888 modifyWeaponSettings("FireRate", rate) modifyWeaponSettings("ShootRate", rate) end)
-local bulletsInput = ACSEngineBox:AddInput('BulletsInput', { Text = 'Enter Bullets', Default = '50', Tooltip = 'Type the number of bullets you want to apply.', Numeric = true })
-ACSEngineBox:AddButton('MULTI BULLETS', function() local bulletsValue = tonumber(bulletsInput.Value) or 50 modifyWeaponSettings("Bullets", bulletsValue) end)
-local inputField = ACSEngineBox:AddInput('FireModeInput', { Text = 'Enter Fire Mode', Default = 'Auto', Tooltip = 'Type the fire mode you want to apply.', })
-ACSEngineBox:AddButton('CHANGE FIRE MODE', function() modifyWeaponSettings("Mode", inputField.Value or 'Auto') end)
+
+ACSEngineBox:AddButton('NO RECOIL | NO SPREAD', function()
+    if getgenv().WeaponModifyMethod == "Attribute" then
+        modifyWeaponSettings("VRecoil", Vector2.new(0, 0))
+        modifyWeaponSettings("HRecoil", Vector2.new(0, 0))
+    else
+        modifyWeaponSettings("VRecoil", {0, 0})
+        modifyWeaponSettings("HRecoil", {0, 0})
+    end
+    modifyWeaponSettings("MinSpread", 0)
+    modifyWeaponSettings("MaxSpread", 0)
+    modifyWeaponSettings("RecoilPunch", 0)
+    modifyWeaponSettings("AimRecoilReduction", 0)
+end)
+
+ACSEngineBox:AddButton('INF BULLET DISTANCE', function()
+    modifyWeaponSettings("Distance", 25000)
+end)
+
+ACSEngineBox:AddInput("BulletSpeedInput", {
+    Text = "Bullet Speed",
+    Default = "10000",
+    Tooltip = "Set the bullet speed",
+    Callback = function(value)
+        getgenv().bulletSpeedValue = tonumber(value) or 10000
+    end
+})
+
+ACSEngineBox:AddButton('CHANGE BULLET SPEED', function()
+    modifyWeaponSettings("BSpeed", getgenv().bulletSpeedValue or 10000)
+    modifyWeaponSettings("MuzzleVelocity", getgenv().bulletSpeedValue or 10000)
+end)
+
+local fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
+    Text = 'Enter Fire Rate',
+    Default = '8888',
+    Tooltip = 'Type the fire rate value you want to apply.',
+})
+
+ACSEngineBox:AddButton('CHANGE FIRE RATE', function()
+    local rate = tonumber(fireRateInput.Value) or 8888
+    modifyWeaponSettings("FireRate", rate)
+    modifyWeaponSettings("ShootRate", rate)
+end)
+
+local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
+    Text = 'Enter Bullets',
+    Default = '50',
+    Tooltip = 'Type the number of bullets you want to apply.',
+    Numeric = true
+})
+
+ACSEngineBox:AddButton('MULTI BULLETS', function()
+    local bulletsValue = tonumber(bulletsInput.Value) or 50
+    modifyWeaponSettings("Bullets", bulletsValue)
+end)
+
+local inputField = ACSEngineBox:AddInput('FireModeInput', {
+    Text = 'Enter Fire Mode',
+    Default = 'Auto',
+    Tooltip = 'Type the fire mode you want to apply.',
+})
+
+ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
+    modifyWeaponSettings("Mode", inputField.Value or 'Auto')
+end)
 
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
 ScriptState.strafeMode, ScriptState.strafeTargetPart = "Horizontal", nil
 local function startTargetStrafe()
-    local targetPart = getClosestTarget()
+    local targetPart = getClosestPlayer({targetVehicles = false})
     ScriptState.strafeTargetPart = targetPart
     if ScriptState.strafeTargetPart and ScriptState.strafeTargetPart.Parent then
         ScriptState.originalCameraMode = Players.LocalPlayer.CameraMode
         Players.LocalPlayer.CameraMode = Enum.CameraMode.Classic
         local targetPos = ScriptState.strafeTargetPart.Position
         LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos))
-        local subj = ScriptState.strafeTargetPart.Parent:FindFirstChild("Humanoid") or ScriptState.strafeTargetPart
-        Camera.CameraSubject = subj
+        Camera.CameraSubject = ScriptState.strafeTargetPart.Parent:FindFirstChild("Humanoid")
     end
 end
 
@@ -2042,46 +2669,118 @@ local function stopTargetStrafe()
     Camera.CameraSubject = LocalPlayer.Character.Humanoid
     ScriptState.strafeEnabled, ScriptState.strafeTargetPart = false, nil
 end
-
 targetStrafe:AddToggle("strafeToggle", {
-    Text = "Target Strafe", Default = false, Tooltip = "Enable or disable Target Strafe.",
+    Text = "Target Strafe",
+    Default = false,
+    Tooltip = "Enable or disable Target Strafe.",
     Callback = function(value)
         ScriptState.strafeEnabled = value
-        if ScriptState.strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
+        if ScriptState.strafeEnabled then
+            startTargetStrafe()
+        else
+            stopTargetStrafe()
+        end
     end
 }):AddKeyPicker("strafeToggleKey", {
-    Default = "None", SyncToggleState = true, Mode = "Toggle", Text = "Target Strafe", Tooltip = "Key to toggle Target Strafe",
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Target Strafe",
+    Tooltip = "Key to toggle Target Strafe",
     Callback = function(value)
         ScriptState.strafeEnabled = value
-        if ScriptState.strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
+        if ScriptState.strafeEnabled then
+            startTargetStrafe()
+        else
+            stopTargetStrafe()
+        end
     end
 })
 
-targetStrafe:AddDropdown("strafeModeDropdown", { AllowNull = false, Text = "Target Strafe Mode", Default = "Horizontal", Values = {"Horizontal", "UP"}, Tooltip = "Select the strafing mode.", Callback = function(value) ScriptState.strafeMode = value end })
-targetStrafe:AddSlider("strafeRadiusSlider", { Text = "Strafe Radius", Default = 5, Min = 1, Max = 20, Rounding = 1, Tooltip = "Set the radius of movement around the target.", Callback = function(value) ScriptState.strafeRadius = value end })
-targetStrafe:AddSlider("strafeSpeedSlider", { Text = "Strafe Speed", Default = 50, Min = 10, Max = 200, Rounding = 1, Tooltip = "Set the speed of strafing around the target.", Callback = function(value) ScriptState.strafeSpeed = value end })
+targetStrafe:AddDropdown("strafeModeDropdown", {
+    AllowNull = false,
+    Text = "Target Strafe Mode",
+    Default = "Horizontal",
+    Values = {"Horizontal", "UP"},
+    Tooltip = "Select the strafing mode.",
+    Callback = function(value) ScriptState.strafeMode = value end
+})
+
+targetStrafe:AddSlider("strafeRadiusSlider", {
+    Text = "Strafe Radius",
+    Default = 5,
+    Min = 1,
+    Max = 20,
+    Rounding = 1,
+    Tooltip = "Set the radius of movement around the target.",
+    Callback = function(value) ScriptState.strafeRadius = value end
+})
+
+targetStrafe:AddSlider("strafeSpeedSlider", {
+    Text = "Strafe Speed",
+    Default = 50,
+    Min = 10,
+    Max = 200,
+    Rounding = 1,
+    Tooltip = "Set the speed of strafing around the target.",
+    Callback = function(value) ScriptState.strafeSpeed = value end
+})
 
 local keybindWatchers = {}
 
 local function registerKeybindWatcher(toggleId, keyPickerId, handlers)
     local toggle = Toggles[toggleId]
     local keyPicker = Options[keyPickerId]
-    if not (toggle and keyPicker) then return end
-    local watcher = { toggle = toggle, keyPicker = keyPicker, lastState = keyPicker:GetState(), lastMode = keyPicker.Mode, modeChanged = handlers and handlers.onModeChanged, stateChanged = handlers and handlers.onStateChanged, }
-    if toggle.Value ~= watcher.lastState then toggle:SetValue(watcher.lastState) elseif watcher.stateChanged then watcher.stateChanged(watcher.lastState) end
-    if watcher.modeChanged then watcher.modeChanged(watcher.lastMode) end
+
+    if not (toggle and keyPicker) then
+        return
+    end
+
+    local watcher = {
+        toggle = toggle,
+        keyPicker = keyPicker,
+        lastState = keyPicker:GetState(),
+        lastMode = keyPicker.Mode,
+        modeChanged = handlers and handlers.onModeChanged,
+        stateChanged = handlers and handlers.onStateChanged,
+    }
+
+    if toggle.Value ~= watcher.lastState then
+        toggle:SetValue(watcher.lastState)
+    elseif watcher.stateChanged then
+        watcher.stateChanged(watcher.lastState)
+    end
+
+    if watcher.modeChanged then
+        watcher.modeChanged(watcher.lastMode)
+    end
+
     keyPicker:OnChanged(function()
         watcher.lastMode = keyPicker.Mode
         watcher.lastState = keyPicker:GetState()
-        if watcher.modeChanged then watcher.modeChanged(watcher.lastMode) end
-        if toggle.Value ~= watcher.lastState then toggle:SetValue(watcher.lastState) elseif watcher.stateChanged then watcher.stateChanged(watcher.lastState) end
+        if watcher.modeChanged then
+            watcher.modeChanged(watcher.lastMode)
+        end
+        if toggle.Value ~= watcher.lastState then
+            toggle:SetValue(watcher.lastState)
+        elseif watcher.stateChanged then
+            watcher.stateChanged(watcher.lastState)
+        end
     end)
+
     table.insert(keybindWatchers, watcher)
 end
 
 registerKeybindWatcher("silentAimEnabled", "silentAim_KeyPicker", {
-    onModeChanged = function(mode) SilentAimSettings.KeyMode = mode or "Toggle" end,
-    onStateChanged = function(state) SilentAimSettings.Enabled = state if silentAimToggle.Value ~= state then silentAimToggle:SetValue(state) end end,
+    onModeChanged = function(mode)
+        SilentAimSettings.KeyMode = mode or "Toggle"
+    end,
+    onStateChanged = function(state)
+        SilentAimSettings.Enabled = state
+        if silentAimToggle.Value ~= state then
+            silentAimToggle:SetValue(state)
+        end
+    end,
 })
 
 registerKeybindWatcher("speedEnabled", "speedToggleKey")
@@ -2092,47 +2791,77 @@ registerKeybindWatcher("strafeToggle", "strafeToggleKey")
 RunService.RenderStepped:Connect(function()
     for _, watcher in ipairs(keybindWatchers) do
         local state = watcher.keyPicker:GetState()
+
         if watcher.keyPicker.Mode ~= watcher.lastMode then
             watcher.lastMode = watcher.keyPicker.Mode
-            if watcher.modeChanged then watcher.modeChanged(watcher.lastMode) end
+            if watcher.modeChanged then
+                watcher.modeChanged(watcher.lastMode)
+            end
             state = watcher.keyPicker:GetState()
         end
+
         if state ~= watcher.lastState then
             watcher.lastState = state
-            if watcher.toggle.Value ~= state then watcher.toggle:SetValue(state) elseif watcher.stateChanged then watcher.stateChanged(state) end
+            if watcher.toggle.Value ~= state then
+                watcher.toggle:SetValue(state)
+            elseif watcher.stateChanged then
+                watcher.stateChanged(state)
+            end
         end
     end
 end)
 
 RunService.RenderStepped:Connect(function()
-    if ScriptState.strafeEnabled then strafeAroundTarget() end
+    if ScriptState.strafeEnabled then
+        strafeAroundTarget()
+    end
 end)
 
 while true do
     task.wait()
+
     if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
         local character = LocalPlayer.Character
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
         if character and rootPart then
             humanoid = character:FindFirstChild("Humanoid")
+
             if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
                 local moveDirection = humanoid.MoveDirection.Unit
                 rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
             end
+
             if ScriptState.isFlyActive then
                 local flyDirection = Vector3.zero
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then flyDirection = flyDirection + Camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then flyDirection = flyDirection - Camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then flyDirection = flyDirection - Camera.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then flyDirection = flyDirection + Camera.CFrame.RightVector end
-                if flyDirection.Magnitude > 0 then flyDirection = flyDirection.Unit end
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    flyDirection = flyDirection + Camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    flyDirection = flyDirection - Camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    flyDirection = flyDirection - Camera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    flyDirection = flyDirection + Camera.CFrame.RightVector
+                end
+
+                if flyDirection.Magnitude > 0 then
+                    flyDirection = flyDirection.Unit
+                end
+
                 local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
                 rootPart.CFrame = CFrame.new(newPosition)
                 rootPart.Velocity = Vector3.new(0, 0, 0)
             end
+
             if ScriptState.isNoClipActive then
                 for _, v in pairs(character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+                    if v:IsA("BasePart") and v.CanCollide then
+                        v.CanCollide = false
+                    end
                 end
             end
         end
