@@ -60,6 +60,7 @@ if not getgenv().ScriptState then
         aimLockVisibleCheck = false,
         aimLockAliveCheck = false,
         aimLockTeamCheck = false,
+        targetVehicles = false,
         smoothingFactor = 0.1,
         predictionFactor = 0.0,
         bodyPartSelected = "Head",
@@ -363,39 +364,6 @@ SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedM
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
-local activeVehicles = {}
-local function updateActiveVehicles()
-    local newVehicles = {}
-    local gameSystems = workspace:FindFirstChild("Game Systems")
-    if gameSystems then
-        local vehicleFolders = {"Tank Workspace", "Hovercraft Workspace", "Helicopter Workspace", "Plane Workspace", "Vehicle Workspace"}
-        for _, folderName in ipairs(vehicleFolders) do
-            local folder = gameSystems:FindFirstChild(folderName)
-            if folder then
-                for _, vehicle in ipairs(folder:GetChildren()) do
-                    local targetPart = nil
-                    local body = vehicle:FindFirstChild("Body")
-                    if body then targetPart = body:FindFirstChild("TargetPart") end
-                    if not targetPart then
-                        local func = vehicle:FindFirstChild("Functionality")
-                        if func then targetPart = func:FindFirstChild("TargetPart") end
-                    end
-                    if targetPart and targetPart:IsA("BasePart") then
-                        table.insert(newVehicles, {model = vehicle, part = targetPart})
-                    end
-                end
-            end
-        end
-    end
-    activeVehicles = newVehicles
-end
-
-task.spawn(function()
-    while task.wait(1) do
-        updateActiveVehicles()
-    end
-end)
-
 local function getClosestPlayer(config)
     config = config or {}
 
@@ -421,9 +389,10 @@ local function getClosestPlayer(config)
         local toggleValue = Toggles and Toggles.TeamCheck and Toggles.TeamCheck.Value
         teamCheck = (toggleValue ~= nil and toggleValue) or silentAimTeamCheck or aimLockTeamCheck or false
     end
-    local checkVehicles = config.targetVehicles
-    if checkVehicles == nil then
-        checkVehicles = SilentAimSettings.TargetVehicles
+    
+    local targetVehicles = config.targetVehicles
+    if targetVehicles == nil then
+        targetVehicles = (Options and Options.TargetVehicles and Options.TargetVehicles.Value) or SilentAimSettings.TargetVehicles or ScriptState.targetVehicles or false
     end
 
     local teamEvaluator = config.teamEvaluator
@@ -496,32 +465,40 @@ local function getClosestPlayer(config)
             end
         end
     end
+    
+    if targetVehicles then
+        local gameSystems = workspace:FindFirstChild("Game Systems")
+        if gameSystems then
+            local vehicleWorkspaces = {"Tank Workspace", "Hovercraft Workspace", "Helicopter Workspace", "Plane Workspace", "Vehicle Workspace"}
+            for _, wsName in ipairs(vehicleWorkspaces) do
+                local wsFolder = gameSystems:FindFirstChild(wsName)
+                if wsFolder then
+                    for _, vehicle in ipairs(wsFolder:GetChildren()) do
+                        local vTargetPart = nil
+                        if vehicle:FindFirstChild("Body") and vehicle.Body:FindFirstChild("TargetPart") then
+                            vTargetPart = vehicle.Body.TargetPart
+                        elseif vehicle:FindFirstChild("Functionality") and vehicle.Functionality:FindFirstChild("TargetPart") then
+                            vTargetPart = vehicle.Functionality.TargetPart
+                        end
 
-    if checkVehicles then
-        for _, vData in ipairs(activeVehicles) do
-            local targetPart = vData.part
-            local vehicle = vData.model
-            if targetPart and targetPart.Parent and vehicle and vehicle.Parent then
-                local ScreenPosition, OnScreen = getPositionOnScreen(targetPart.Position)
-                if OnScreen then
-                    local Distance = (originPosition - ScreenPosition).Magnitude
-                    if Distance <= (DistanceToMouse or radiusOption) then
-                        local isVis = true
-                        if visibleCheck then
-                            local LocalPlayerCharacter = LocalPlayer.Character
-                            if LocalPlayerCharacter then
-                                local CastPoints = {targetPart.Position, LocalPlayerCharacter, vehicle}
-                                local IgnoreList = {LocalPlayerCharacter, vehicle}
-                                local ObscuringObjects = #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList)
-                                if ObscuringObjects > 0 then
-                                    isVis = false
+                        if vTargetPart then
+                            local ScreenPosition, OnScreen = getPositionOnScreen(vTargetPart.Position)
+                            if OnScreen then
+                                local Distance = (originPosition - ScreenPosition).Magnitude
+                                if Distance <= (DistanceToMouse or radiusOption) then
+                                    if visibleCheck then
+                                        local CastPoints = { vTargetPart.Position, LocalPlayer.Character }
+                                        local IgnoreList = { LocalPlayer.Character, vehicle }
+                                        if #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList) > 0 then
+                                            continue
+                                        end
+                                    end
+
+                                    ClosestPart = vTargetPart
+                                    ClosestPlayer = vehicle
+                                    DistanceToMouse = Distance
                                 end
                             end
-                        end
-                        if isVis then
-                            ClosestPart = targetPart
-                            ClosestPlayer = vehicle
-                            DistanceToMouse = Distance
                         end
                     end
                 end
@@ -537,30 +514,36 @@ local function getBodyPart(character, part)
 end
 
 local function getNearestPlayerToMouse()
-    local _, player = getClosestPlayer({
+    local part, player = getClosestPlayer({
         targetPart = ScriptState.bodyPartSelected,
         visibleCheck = ScriptState.aimLockVisibleCheck,
         aliveCheck = ScriptState.aimLockAliveCheck,
         teamCheck = ScriptState.aimLockTeamCheck,
-        targetVehicles = false
+        targetVehicles = ScriptState.targetVehicles
     })
     if player and player ~= LocalPlayer then
-        return player
+        return player, part
     end
 
-    return nil
+    return nil, nil
 end
 
 local function acquireLockTarget()
-    local player = getNearestPlayerToMouse()
-    if player and player.Character then
-        local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
-        local targetPart = player.Character:FindFirstChild(partName)
-
-        if targetPart then
+    local player, part = getNearestPlayerToMouse()
+    if player then
+        if typeof(player) == "Instance" and player:IsA("Model") then
             ScriptState.isLockedOn = true
             ScriptState.targetPlayer = player
             return true
+        elseif player.Character then
+            local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
+            local targetPart = player.Character:FindFirstChild(partName)
+
+            if targetPart then
+                ScriptState.isLockedOn = true
+                ScriptState.targetPlayer = player
+                return true
+            end
         end
     end
 
@@ -594,31 +577,62 @@ RunService.RenderStepped:Connect(function()
         acquireLockTarget()
     end
 
-    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
-        if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
-            return
-        end
+    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer then
+        local part
+        local isVehicle = typeof(ScriptState.targetPlayer) == "Instance" and ScriptState.targetPlayer:IsA("Model")
 
-        if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
-            return
-        end
+        if isVehicle then
+            part = ScriptState.targetPlayer:FindFirstChild("Body") and ScriptState.targetPlayer.Body:FindFirstChild("TargetPart")
+                or ScriptState.targetPlayer:FindFirstChild("Functionality") and ScriptState.targetPlayer.Functionality:FindFirstChild("TargetPart")
 
-        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
-        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+            if not part or not part.Parent then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
 
-        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
-            local currentCameraPosition = Camera.CFrame.Position
-
-            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+            if ScriptState.aimLockVisibleCheck then
+                local CastPoints = { part.Position, LocalPlayer.Character }
+                local IgnoreList = { LocalPlayer.Character, ScriptState.targetPlayer }
+                if #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList) > 0 then
+                    ScriptState.isLockedOn = false
+                    ScriptState.targetPlayer = nil
+                    return
+                end
+            end
         else
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
+            if not ScriptState.targetPlayer.Character then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
+
+            if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
+
+            if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
+
+            local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+            part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+
+            if not part or ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
         end
+
+        local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+        local currentCameraPosition = Camera.CFrame.Position
+
+        Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
     end
 end)
 
@@ -894,8 +908,21 @@ aimbox:AddToggle("aimLockTeamCheck", {
     Tooltip = "Avoid locking teammates.",
     Callback = function(value)
         ScriptState.aimLockTeamCheck = value
-        if value and ScriptState.lockEnabled and ScriptState.targetPlayer and ScriptState.targetPlayer.Team == LocalPlayer.Team then
+        if value and ScriptState.lockEnabled and ScriptState.targetPlayer and typeof(ScriptState.targetPlayer) == "Instance" and ScriptState.targetPlayer:IsA("Player") and ScriptState.targetPlayer.Team == LocalPlayer.Team then
             acquireLockTarget()
+        end
+    end
+})
+
+aimbox:AddToggle("targetVehiclesToggle", {
+    Text = "Target Vehicles",
+    Default = false,
+    Tooltip = "Allow AimLock to target vehicles.",
+    Callback = function(value)
+        ScriptState.targetVehicles = value
+        if not value and ScriptState.isLockedOn and typeof(ScriptState.targetPlayer) == "Instance" and ScriptState.targetPlayer:IsA("Model") then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 })
@@ -969,33 +996,53 @@ velbox:AddSlider("ReverseResolveIntensity", {
 })
 
 RunService.RenderStepped:Connect(function()
-    if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
-        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
-        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+    if ScriptState.isLockedOn and ScriptState.targetPlayer then
+        local part
+        local isVehicle = typeof(ScriptState.targetPlayer) == "Instance" and ScriptState.targetPlayer:IsA("Model")
 
-        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+        if isVehicle then
+            part = ScriptState.targetPlayer:FindFirstChild("Body") and ScriptState.targetPlayer.Body:FindFirstChild("TargetPart")
+                or ScriptState.targetPlayer:FindFirstChild("Functionality") and ScriptState.targetPlayer.Functionality:FindFirstChild("TargetPart")
 
-            if ScriptState.antiLockEnabled then
-                if ScriptState.resolverMethod == "Recalculate" then
-                    predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
-                elseif ScriptState.resolverMethod == "Randomize" then
-                    predictedPosition = predictedPosition + Vector3.new(
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
-                    )
-                elseif ScriptState.resolverMethod == "Invert" then
-                    predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
-                end
+            if not part or not part.Parent then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
             end
-
-            local currentCameraPosition = Camera.CFrame.Position
-            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
+            if not ScriptState.targetPlayer.Character then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
+            local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+            part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
+
+            if not part or ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+                return
+            end
         end
+
+        local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+
+        if ScriptState.antiLockEnabled then
+            if ScriptState.resolverMethod == "Recalculate" then
+                predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
+            elseif ScriptState.resolverMethod == "Randomize" then
+                predictedPosition = predictedPosition + Vector3.new(
+                    math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                    math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                    math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
+                )
+            elseif ScriptState.resolverMethod == "Invert" then
+                predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
+            end
+        end
+
+        local currentCameraPosition = Camera.CFrame.Position
+        Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
     end
 end)
 
@@ -1087,7 +1134,7 @@ end)
 Main:AddToggle("TargetVehicles", {
     Text = "Target Vehicles",
     Default = SilentAimSettings.TargetVehicles,
-    Tooltip = "Enable targeting War Tycoon vehicles (Tanks, Helis, etc.)"
+    Tooltip = "Allow Silent Aim to target vehicles"
 }):OnChanged(function()
     SilentAimSettings.TargetVehicles = Toggles.TargetVehicles.Value
 end)
@@ -1255,17 +1302,20 @@ task.spawn(function()
             local visibleCheckActive = SilentAimSettings.VisibleCheck or ScriptState.aimLockVisibleCheck
             local teamCheckActive = SilentAimSettings.TeamCheck or ScriptState.aimLockTeamCheck
             local aliveCheckActive = SilentAimSettings.AliveCheck or ScriptState.aimLockAliveCheck
+            local targetVehiclesActive = SilentAimSettings.TargetVehicles or ScriptState.targetVehicles
 
             local closestPart, closestPlayer = getClosestPlayer({
                 visibleCheck = visibleCheckActive,
                 teamCheck = teamCheckActive,
                 aliveCheck = aliveCheckActive,
-                targetVehicles = SilentAimSettings.TargetVehicles
+                targetVehicles = targetVehiclesActive
             })
             if closestPart and closestPlayer then
-                if closestPlayer:IsA("Player") then
-                    local char = closestPlayer.Character or closestPart.Parent
-                    if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+                local isVehicle = typeof(closestPlayer) == "Instance" and closestPlayer:IsA("Model")
+                local char = isVehicle and closestPlayer or (closestPlayer.Character or closestPart.Parent)
+                
+                if isVehicle or (char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart")) then
+                    if not isVehicle then
                         if teamCheckActive and playersOnSameTeam(closestPlayer) then
                             removeOldHighlight()
                             return
@@ -1278,51 +1328,34 @@ task.spawn(function()
                             removeOldHighlight()
                             return
                         end
-                        local Root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
-                        if Root then
-                            local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
-                            removeOldHighlight()
-                            if IsOnScreen then
-                                local highlight = char:FindFirstChildOfClass("Highlight")
-                                if not highlight then
-                                    highlight = Instance.new("Highlight")
-                                    highlight.Parent = char
-                                    highlight.Adornee = char
-                                end
-                                highlight.FillColor = Options.MouseVisualizeColor.Value
-                                highlight.FillTransparency = 0.5
-                                highlight.OutlineColor = Options.MouseVisualizeColor.Value
-                                highlight.OutlineTransparency = 0
-                                ScriptState.previousHighlight = highlight
-                            end
-                        end
-                    end
-                else
-                    if visibleCheckActive then
-                        local LocalPlayerCharacter = LocalPlayer.Character
-                        if LocalPlayerCharacter then
-                            local CastPoints = {closestPart.Position, LocalPlayerCharacter, closestPlayer}
-                            local IgnoreList = {LocalPlayerCharacter, closestPlayer}
+                    else
+                        if visibleCheckActive then
+                            local CastPoints = { closestPart.Position, LocalPlayer.Character }
+                            local IgnoreList = { LocalPlayer.Character, closestPlayer }
                             if #GetPartsObscuringTarget(Camera, CastPoints, IgnoreList) > 0 then
                                 removeOldHighlight()
                                 return
                             end
                         end
                     end
-                    local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, closestPart.Position)
-                    removeOldHighlight()
-                    if IsOnScreen then
-                        local highlight = closestPlayer:FindFirstChildOfClass("Highlight")
-                        if not highlight then
-                            highlight = Instance.new("Highlight")
-                            highlight.Parent = closestPlayer
-                            highlight.Adornee = closestPlayer
+                    
+                    local Root = isVehicle and closestPart or (char.PrimaryPart or char:FindFirstChild("HumanoidRootPart"))
+                    if Root then
+                        local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                        removeOldHighlight()
+                        if IsOnScreen then
+                            local highlight = char:FindFirstChildOfClass("Highlight")
+                            if not highlight then
+                                highlight = Instance.new("Highlight")
+                                highlight.Parent = char
+                                highlight.Adornee = char
+                            end
+                            highlight.FillColor = Options.MouseVisualizeColor.Value
+                            highlight.FillTransparency = 0.5
+                            highlight.OutlineColor = Options.MouseVisualizeColor.Value
+                            highlight.OutlineTransparency = 0
+                            ScriptState.previousHighlight = highlight
                         end
-                        highlight.FillColor = Options.MouseVisualizeColor.Value
-                        highlight.FillTransparency = 0.5
-                        highlight.OutlineColor = Options.MouseVisualizeColor.Value
-                        highlight.OutlineTransparency = 0
-                        ScriptState.previousHighlight = highlight
                     end
                 end
             else
@@ -1403,7 +1436,7 @@ local function trackPlayer(plr)
 
         hum.HealthChanged:Connect(function(newHp)
             if Toggles.HitSoundEnabled.Value then
-                local closestPart, closestPlayer = getClosestPlayer({targetVehicles = false})
+                local closestPart, closestPlayer = getClosestPlayer()
                 if closestPart and closestPlayer and closestPlayer == plr then
                     if newHp < lastHealth then
                         playHitSound()
@@ -1425,7 +1458,7 @@ Players.PlayerAdded:Connect(trackPlayer)
 
 RunService.Heartbeat:Connect(function()
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
-        local closestPart = getClosestPlayer({targetVehicles = SilentAimSettings.TargetVehicles})
+        local closestPart = getClosestPlayer()
         ScriptState.ClosestHitPart = closestPart
     else
         ScriptState.ClosestHitPart = nil
@@ -1482,7 +1515,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     end
 
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
-        local HitPart = ScriptState.ClosestHitPart or getClosestPlayer({targetVehicles = SilentAimSettings.TargetVehicles})
+        local HitPart = ScriptState.ClosestHitPart or getClosestPlayer()
         if HitPart then
             local ignoredList = getIgnoredList()
             local originOptions = SilentAimSettings.Origin
@@ -2642,7 +2675,7 @@ local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
 ScriptState.strafeMode, ScriptState.strafeTargetPart = "Horizontal", nil
 local function startTargetStrafe()
-    local targetPart = getClosestPlayer({targetVehicles = false})
+    local targetPart = getClosestPlayer()
     ScriptState.strafeTargetPart = targetPart
     if ScriptState.strafeTargetPart and ScriptState.strafeTargetPart.Parent then
         ScriptState.originalCameraMode = Players.LocalPlayer.CameraMode
