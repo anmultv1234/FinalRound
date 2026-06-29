@@ -153,7 +153,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -1040,13 +1040,6 @@ Main:AddToggle("AliveCheck", {
     SilentAimSettings.AliveCheck = Toggles.AliveCheck.Value
 end)
 
-Main:AddToggle("TargetVehicles", {
-    Text = "Target Vehicles",
-    Default = SilentAimSettings.TargetVehicles,
-}):OnChanged(function()
-    SilentAimSettings.TargetVehicles = Toggles.TargetVehicles.Value
-end)
-
 Main:AddToggle("BulletTP", {
     Text = "Bullet Teleport",
     Default = SilentAimSettings.BulletTP,
@@ -1067,7 +1060,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Random", "RightFoot", "LeftFoot"}
+    Values = {"Head", "HumanoidRootPart", "Random", "None"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
