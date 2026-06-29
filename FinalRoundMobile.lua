@@ -91,6 +91,7 @@ if not getgenv().ScriptState then
         strafeMode = "Horizontal",
         strafeTargetPart = nil,
         originalCameraMode = nil,
+        LastUpdate = 0
     }
 end
 
@@ -1359,12 +1360,15 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(trackPlayer)
 
-RunService.Heartbeat:Connect(function()
-    if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
-        local closestPart = getClosestPlayer()
-        ScriptState.ClosestHitPart = closestPart
-    else
-        ScriptState.ClosestHitPart = nil
+RunService.RenderStepped:Connect(function()
+    if tick() - ScriptState.LastUpdate >= 0.1 then
+        ScriptState.LastUpdate = tick()
+        if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
+            local closestPart = getClosestPlayer()
+            ScriptState.ClosestHitPart = closestPart
+        else
+            ScriptState.ClosestHitPart = nil
+        end
     end
 end)
 
