@@ -91,6 +91,7 @@ if not getgenv().ScriptState then
         strafeMode = "Horizontal",
         strafeTargetPart = nil,
         originalCameraMode = nil,
+        LastUpdate = 0
     }
 end
 
@@ -153,7 +154,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "RightFoot", "LeftFoot"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -450,58 +451,60 @@ local function getClosestPlayer(config)
     local ClosestPlayer
     local DistanceToMouse
 
-    for _, Player in next, GetPlayers(Players) do
-        if Player == LocalPlayer then
-            continue
-        end
-
-        if ignoredPlayers and ignoredPlayers[Player.Name] then
-            continue
-        end
-
-        if teamCheck and teamEvaluator(Player) then
-            continue
-        end
-
-        if visibleCheck and not IsPlayerVisible(Player) then
-            continue
-        end
-
-        local Character = Player.Character
-        if not Character then
-            continue
-        end
-
-        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
-        local Humanoid = FindFirstChild(Character, "Humanoid")
-
-        if not HumanoidRootPart or not Humanoid then
-            continue
-        end
-
-        if aliveCheck and Humanoid.Health <= 0 then
-            continue
-        end
-
-        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then
-            continue
-        end
-
-        local Distance = (originPosition - ScreenPosition).Magnitude
-        if Distance <= (DistanceToMouse or radiusOption) then
-            local targetPartName
-            if targetPartOption == "Random" then
-                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
-            else
-                targetPartName = targetPartOption
+    if targetPartOption ~= "None" then
+        for _, Player in next, GetPlayers(Players) do
+            if Player == LocalPlayer then
+                continue
             end
 
-            local candidatePart = Character[targetPartName]
-            if candidatePart then
-                ClosestPart = candidatePart
-                ClosestPlayer = Player
-                DistanceToMouse = Distance
+            if ignoredPlayers and ignoredPlayers[Player.Name] then
+                continue
+            end
+
+            if teamCheck and teamEvaluator(Player) then
+                continue
+            end
+
+            if visibleCheck and not IsPlayerVisible(Player) then
+                continue
+            end
+
+            local Character = Player.Character
+            if not Character then
+                continue
+            end
+
+            local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+            local Humanoid = FindFirstChild(Character, "Humanoid")
+
+            if not HumanoidRootPart or not Humanoid then
+                continue
+            end
+
+            if aliveCheck and Humanoid.Health <= 0 then
+                continue
+            end
+
+            local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+            if not OnScreen then
+                continue
+            end
+
+            local Distance = (originPosition - ScreenPosition).Magnitude
+            if Distance <= (DistanceToMouse or radiusOption) then
+                local targetPartName
+                if targetPartOption == "Random" then
+                    targetPartName = ValidTargetParts[math.random(1, 2)]
+                else
+                    targetPartName = targetPartOption
+                end
+
+                local candidatePart = Character[targetPartName]
+                if candidatePart then
+                    ClosestPart = candidatePart
+                    ClosestPlayer = Player
+                    DistanceToMouse = Distance
+                end
             end
         end
     end
@@ -1105,7 +1108,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Random", "RightFoot", "LeftFoot"}
+    Values = {"Head", "HumanoidRootPart", "None"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
@@ -1395,12 +1398,15 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(trackPlayer)
 
-RunService.Heartbeat:Connect(function()
-    if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
-        local closestPart = getClosestPlayer()
-        ScriptState.ClosestHitPart = closestPart
-    else
-        ScriptState.ClosestHitPart = nil
+RunService.RenderStepped:Connect(function()
+    if tick() - ScriptState.LastUpdate >= 0.1 then
+        ScriptState.LastUpdate = tick()
+        if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
+            local closestPart = getClosestPlayer()
+            ScriptState.ClosestHitPart = closestPart
+        else
+            ScriptState.ClosestHitPart = nil
+        end
     end
 end)
 
