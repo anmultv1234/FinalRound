@@ -153,7 +153,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
+local ValidTargetParts = {"Head", "HumanoidRootPart"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -407,58 +407,60 @@ local function getClosestPlayer(config)
     local ClosestPlayer
     local DistanceToMouse
 
-    for _, Player in next, GetPlayers(Players) do
-        if Player == LocalPlayer then
-            continue
-        end
-
-        if ignoredPlayers and ignoredPlayers[Player.Name] then
-            continue
-        end
-
-        if teamCheck and teamEvaluator(Player) then
-            continue
-        end
-
-        if visibleCheck and not IsPlayerVisible(Player) then
-            continue
-        end
-
-        local Character = Player.Character
-        if not Character then
-            continue
-        end
-
-        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
-        local Humanoid = FindFirstChild(Character, "Humanoid")
-
-        if not HumanoidRootPart or not Humanoid then
-            continue
-        end
-
-        if aliveCheck and Humanoid.Health <= 0 then
-            continue
-        end
-
-        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then
-            continue
-        end
-
-        local Distance = (originPosition - ScreenPosition).Magnitude
-        if Distance <= (DistanceToMouse or radiusOption) then
-            local targetPartName
-            if targetPartOption == "Random" then
-                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
-            else
-                targetPartName = targetPartOption
+    if targetPartOption ~= "None" then
+        for _, Player in next, GetPlayers(Players) do
+            if Player == LocalPlayer then
+                continue
             end
 
-            local candidatePart = Character[targetPartName]
-            if candidatePart then
-                ClosestPart = candidatePart
-                ClosestPlayer = Player
-                DistanceToMouse = Distance
+            if ignoredPlayers and ignoredPlayers[Player.Name] then
+                continue
+            end
+
+            if teamCheck and teamEvaluator(Player) then
+                continue
+            end
+
+            if visibleCheck and not IsPlayerVisible(Player) then
+                continue
+            end
+
+            local Character = Player.Character
+            if not Character then
+                continue
+            end
+
+            local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+            local Humanoid = FindFirstChild(Character, "Humanoid")
+
+            if not HumanoidRootPart or not Humanoid then
+                continue
+            end
+
+            if aliveCheck and Humanoid.Health <= 0 then
+                continue
+            end
+
+            local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+            if not OnScreen then
+                continue
+            end
+
+            local Distance = (originPosition - ScreenPosition).Magnitude
+            if Distance <= (DistanceToMouse or radiusOption) then
+                local targetPartName
+                if targetPartOption == "Random" then
+                    targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
+                else
+                    targetPartName = targetPartOption
+                end
+
+                local candidatePart = Character[targetPartName]
+                if candidatePart then
+                    ClosestPart = candidatePart
+                    ClosestPlayer = Player
+                    DistanceToMouse = Distance
+                end
             end
         end
     end
@@ -1038,6 +1040,13 @@ Main:AddToggle("AliveCheck", {
     Tooltip = "Ignore players with zero health"
 }):OnChanged(function()
     SilentAimSettings.AliveCheck = Toggles.AliveCheck.Value
+end)
+
+Main:AddToggle("TargetVehicles", {
+    Text = "Target Vehicles",
+    Default = SilentAimSettings.TargetVehicles,
+}):OnChanged(function()
+    SilentAimSettings.TargetVehicles = Toggles.TargetVehicles.Value
 end)
 
 Main:AddToggle("BulletTP", {
