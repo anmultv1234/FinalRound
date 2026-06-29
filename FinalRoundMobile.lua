@@ -365,6 +365,49 @@ SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedM
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
+local VehicleCache = {}
+
+local function onVehicleAdded(vehicle)
+    VehicleCache[vehicle] = true
+end
+
+local function onVehicleRemoved(vehicle)
+    VehicleCache[vehicle] = nil
+end
+
+local function setupFolder(folder)
+    for _, vehicle in ipairs(folder:GetChildren()) do
+        onVehicleAdded(vehicle)
+    end
+    folder.ChildAdded:Connect(onVehicleAdded)
+    folder.ChildRemoved:Connect(onVehicleRemoved)
+end
+
+local function setupGameSystems(gameSystems)
+    for _, folder in ipairs(gameSystems:GetChildren()) do
+        setupFolder(folder)
+    end
+    gameSystems.ChildAdded:Connect(setupFolder)
+    gameSystems.ChildRemoved:Connect(function(folder)
+        for vehicle in pairs(VehicleCache) do
+            if vehicle.Parent == folder or not vehicle.Parent then
+                onVehicleRemoved(vehicle)
+            end
+        end
+    end)
+end
+
+local gameSystemsInitial = workspace:FindFirstChild("Game Systems")
+if gameSystemsInitial then
+    setupGameSystems(gameSystemsInitial)
+end
+
+workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Game Systems" then
+        setupGameSystems(child)
+    end
+end)
+
 local function getClosestPlayer(config)
     config = config or {}
 
@@ -464,22 +507,17 @@ local function getClosestPlayer(config)
     end
     
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
-        local gameSystems = workspace:FindFirstChild("Game Systems")
-        if gameSystems then
-            for _, folder in ipairs(gameSystems:GetChildren()) do
-                for _, vehicle in ipairs(folder:GetChildren()) do
-                    local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
-                    local TargetPart = body and FindFirstChild(body, vehiclePartOption)
-                    if TargetPart then
-                        local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
-                        if OnScreen then
-                            local Dist = (originPosition - Pos).Magnitude
-                            if Dist <= (DistanceToMouse or radiusOption) then
-                                ClosestPart = TargetPart
-                                ClosestPlayer = vehicle
-                                DistanceToMouse = Dist
-                            end
-                        end
+        for vehicle in pairs(VehicleCache) do
+            local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
+            local TargetPart = body and FindFirstChild(body, vehiclePartOption)
+            if TargetPart then
+                local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
+                if OnScreen then
+                    local Dist = (originPosition - Pos).Magnitude
+                    if Dist <= (DistanceToMouse or radiusOption) then
+                        ClosestPart = TargetPart
+                        ClosestPlayer = vehicle
+                        DistanceToMouse = Dist
                     end
                 end
             end
