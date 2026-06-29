@@ -153,7 +153,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -450,7 +450,7 @@ local function getClosestPlayer(config)
             if Distance <= (DistanceToMouse or radiusOption) then
                 local targetPartName
                 if targetPartOption == "Random" then
-                    targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
+                    targetPartName = ValidTargetParts[math.random(1, 2)]
                 else
                     targetPartName = targetPartOption
                 end
@@ -1069,7 +1069,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Random", "None"}
+    Values = {"Head", "HumanoidRootPart", "None"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
