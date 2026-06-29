@@ -510,10 +510,21 @@ local function getClosestPlayer(config)
     end
     
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
+        local camPos = Camera.CFrame.Position
+        local lookVector = Camera.CFrame.LookVector
+
         for vehicle in pairs(VehicleCache) do
+            if not vehicle or not vehicle.Parent then continue end
+
             local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
             local TargetPart = body and FindFirstChild(body, vehiclePartOption)
+            
             if TargetPart then
+                local targetDir = (TargetPart.Position - camPos).Unit
+                if lookVector:Dot(targetDir) < 0 then 
+                    continue 
+                end
+
                 local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
                 if OnScreen then
                     local Dist = (originPosition - Pos).Magnitude
@@ -1399,14 +1410,11 @@ end
 Players.PlayerAdded:Connect(trackPlayer)
 
 RunService.RenderStepped:Connect(function()
-    if tick() - ScriptState.LastUpdate >= 0.1 then
-        ScriptState.LastUpdate = tick()
-        if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
-            local closestPart = getClosestPlayer()
-            ScriptState.ClosestHitPart = closestPart
-        else
-            ScriptState.ClosestHitPart = nil
-        end
+    if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value then
+        local closestPart = getClosestPlayer()
+        ScriptState.ClosestHitPart = closestPart
+    else
+        ScriptState.ClosestHitPart = nil
     end
 end)
 
