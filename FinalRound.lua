@@ -610,10 +610,6 @@ RunService.RenderStepped:Connect(function()
     end
 
     if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChild("Humanoid")
-        if hum and hum.Sit then return end
-
         if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
             ScriptState.isLockedOn = false
             ScriptState.targetPlayer = nil
@@ -1301,12 +1297,6 @@ local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method, Arguments = getnamecallmethod(), {...}
     local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
-    
-    local mousePos = UserInputService:GetMouseLocation()
-    local guiObjects = GuiService:GetGuiObjectsAtPosition(mousePos.X, mousePos.Y)
-    if #guiObjects > 0 then
-        return oldNamecall(...)
-    end
 
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
     if Method == "Destroy" and self == Client then
@@ -2690,64 +2680,65 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-local noclipConn
-local function handleNoClip(enabled)
-    if enabled then
-        noclipConn = RunService.Stepped:Connect(function()
-            local char = LocalPlayer.Character
-            if char then
-                for _, v in pairs(char:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = false
+task.spawn(function()
+    while true do
+        task.wait()
+
+        if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+            if character and rootPart then
+                humanoid = character:FindFirstChild("Humanoid")
+
+                if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+                    local moveDirection = humanoid.MoveDirection.Unit
+                    rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
+                end
+
+                if ScriptState.isFlyActive then
+                    local flyDirection = Vector3.zero
+
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                        flyDirection = flyDirection + Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                        flyDirection = flyDirection - Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                        flyDirection = flyDirection - Camera.CFrame.RightVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                        flyDirection = flyDirection + Camera.CFrame.RightVector
+                    end
+
+                    if flyDirection.Magnitude > 0 then
+                        flyDirection = flyDirection.Unit
+                    end
+
+                    local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
+                    rootPart.CFrame = CFrame.new(newPosition)
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+                end
+
+                if ScriptState.isNoClipActive then
+                    for _, v in pairs(character:GetDescendants()) do
+                        if v:IsA("BasePart") and v.CanCollide then
+                            v.CanCollide = false
+                        end
                     end
                 end
             end
-        end)
-    else
-        if noclipConn then
-            noclipConn:Disconnect()
-            noclipConn = nil
-        end
-        local char = LocalPlayer.Character
-        if char then
-            for _, v in pairs(char:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.CanCollide = true
+        else
+            local character = LocalPlayer.Character
+            if character and not ScriptState.isNoClipActive then
+                for _, v in pairs(character:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.CanCollide and v.Name ~= "HumanoidRootPart" then
+                        v.CanCollide = true
+                    end
                 end
             end
         end
-    end
-end
-
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-        local character = LocalPlayer.Character
-        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-        if character and rootPart then
-            humanoid = character:FindFirstChild("Humanoid")
-            if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                rootPart.CFrame = rootPart.CFrame + (humanoid.MoveDirection.Unit * ScriptState.Cmultiplier)
-            end
-            if ScriptState.isFlyActive then
-                local flyDirection = Vector3.zero
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then flyDirection = flyDirection + Camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then flyDirection = flyDirection - Camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then flyDirection = flyDirection - Camera.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then flyDirection = flyDirection + Camera.CFrame.RightVector end
-                if flyDirection.Magnitude > 0 then flyDirection = flyDirection.Unit end
-                rootPart.CFrame = rootPart.CFrame + (flyDirection * ScriptState.flySpeed)
-                rootPart.Velocity = Vector3.new(0, 0, 0)
-            end
-        end
-    end
-end)
-
-local lastNoClipState = false
-RunService.RenderStepped:Connect(function()
-    if lastNoClipState ~= ScriptState.isNoClipActive then
-        lastNoClipState = ScriptState.isNoClipActive
-        handleNoClip(lastNoClipState)
     end
 end)
 
