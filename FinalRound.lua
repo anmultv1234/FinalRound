@@ -2512,6 +2512,7 @@ end)
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
 ScriptState.strafeMode, ScriptState.strafeTargetPart = "Horizontal", nil
+
 local function startTargetStrafe()
     local targetPart = getClosestPlayer()
     ScriptState.strafeTargetPart = targetPart
@@ -2540,6 +2541,7 @@ local function stopTargetStrafe()
     Camera.CameraSubject = LocalPlayer.Character.Humanoid
     ScriptState.strafeEnabled, ScriptState.strafeTargetPart = false, nil
 end
+
 targetStrafe:AddToggle("strafeToggle", {
     Text = "Target Strafe",
     Default = false,
@@ -2689,18 +2691,33 @@ RunService.RenderStepped:Connect(function()
 end)
 
 local noclipConn
-RunService.Stepped:Connect(function()
-    if ScriptState.isNoClipActive then
-        local character = LocalPlayer.Character
-        if character then
-            for _, v in pairs(character:GetDescendants()) do
+local function handleNoClip(enabled)
+    if enabled then
+        noclipConn = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, v in pairs(char:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        v.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConn then
+            noclipConn:Disconnect()
+            noclipConn = nil
+        end
+        local char = LocalPlayer.Character
+        if char then
+            for _, v in pairs(char:GetDescendants()) do
                 if v:IsA("BasePart") then
-                    v.CanCollide = false
+                    v.CanCollide = true
                 end
             end
         end
     end
-end)
+end
 
 task.spawn(function()
     while true do
@@ -2723,6 +2740,14 @@ task.spawn(function()
                 rootPart.Velocity = Vector3.new(0, 0, 0)
             end
         end
+    end
+end)
+
+local lastNoClipState = false
+RunService.RenderStepped:Connect(function()
+    if lastNoClipState ~= ScriptState.isNoClipActive then
+        lastNoClipState = ScriptState.isNoClipActive
+        handleNoClip(lastNoClipState)
     end
 end)
 
