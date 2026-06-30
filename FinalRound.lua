@@ -1,7 +1,8 @@
 local UIS = game:GetService("UserInputService")
 if UIS.TouchEnabled and not UIS.MouseEnabled and not UIS.KeyboardEnabled then
-    getgenv().bypass_adonis = true 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/FinalRoundMobile.lua"))() return
+    getgenv().bypass_adonis = true
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/FinalRoundMobile.lua"))()
+    return
 end
 
 if not game:IsLoaded() then
@@ -66,6 +67,7 @@ if not getgenv().ScriptState then
         aimLockVisibleCheck = false,
         aimLockAliveCheck = false,
         aimLockTeamCheck = false,
+        targetVehicles = false,
         smoothingFactor = 0.1,
         predictionFactor = 0.0,
         bodyPartSelected = "Head",
@@ -99,26 +101,23 @@ if not getgenv().ScriptState then
     }
 end
 
--- 편의를 위해 상단에 local 참조 추가
 local ScriptState = getgenv().ScriptState
 
 local SilentAimSettings = {
     Enabled = false,
-
-    ClassName = "PasteWare  |  github.com/FakeAngles",
+    ClassName = "PasteWare | github.com/FakeAngles",
     ToggleKey = "None",
     KeyMode = "Toggle",
-
     TeamCheck = false,
     VisibleCheck = false,
     AliveCheck = false,
+    TargetVehicles = false,
     TargetPart = "HumanoidRootPart",
+    VehicleTargetPart = "TargetPart",
     SilentAimMethod = "Raycast",
-
     FOVRadius = 130,
     FOVVisible = false,
     ShowSilentAimTarget = false,
-
     HitChance = 100,
     MultiplyUnitBy = 1000,
     BlockedMethods = {},
@@ -163,7 +162,7 @@ local RenderStepped = RunService.RenderStepped
 local GuiInset = GuiService.GetGuiInset
 local GetMouseLocation = UserInputService.GetMouseLocation
 
-local ValidTargetParts = {"Head", "HumanoidRootPart"}
+local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
 local fov_circle = Drawing.new("Circle")
@@ -374,10 +373,54 @@ SilentAimSettings.BlockedMethods = normalizeSelection(SilentAimSettings.BlockedM
 SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
+local VehicleCache = {}
+
+local function onVehicleAdded(vehicle)
+    VehicleCache[vehicle] = true
+end
+
+local function onVehicleRemoved(vehicle)
+    VehicleCache[vehicle] = nil
+end
+
+local function setupFolder(folder)
+    for _, vehicle in ipairs(folder:GetChildren()) do
+        onVehicleAdded(vehicle)
+    end
+    folder.ChildAdded:Connect(onVehicleAdded)
+    folder.ChildRemoved:Connect(onVehicleRemoved)
+end
+
+local function setupGameSystems(gameSystems)
+    for _, folder in ipairs(gameSystems:GetChildren()) do
+        setupFolder(folder)
+    end
+    gameSystems.ChildAdded:Connect(setupFolder)
+    gameSystems.ChildRemoved:Connect(function(folder)
+        for vehicle in pairs(VehicleCache) do
+            if vehicle.Parent == folder or not vehicle.Parent then
+                onVehicleRemoved(vehicle)
+            end
+        end
+    end)
+end
+
+local gameSystemsInitial = workspace:FindFirstChild("Game Systems")
+if gameSystemsInitial then
+    setupGameSystems(gameSystemsInitial)
+end
+
+workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Game Systems" then
+        setupGameSystems(child)
+    end
+end)
+
 local function getClosestPlayer(config)
     config = config or {}
 
     local targetPartOption = config.targetPart or (Options and Options.TargetPart and Options.TargetPart.Value) or SilentAimSettings.TargetPart
+    local vehiclePartOption = SilentAimSettings.VehicleTargetPart
     if not targetPartOption then
         return nil, nil
     end
@@ -415,58 +458,89 @@ local function getClosestPlayer(config)
     local ClosestPlayer
     local DistanceToMouse
 
-    for _, Player in next, GetPlayers(Players) do
-        if Player == LocalPlayer then
-            continue
-        end
-
-        if ignoredPlayers and ignoredPlayers[Player.Name] then
-            continue
-        end
-
-        if teamCheck and teamEvaluator(Player) then
-            continue
-        end
-
-        if visibleCheck and not IsPlayerVisible(Player) then
-            continue
-        end
-
-        local Character = Player.Character
-        if not Character then
-            continue
-        end
-
-        local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
-        local Humanoid = FindFirstChild(Character, "Humanoid")
-
-        if not HumanoidRootPart or not Humanoid then
-            continue
-        end
-
-        if aliveCheck and Humanoid.Health <= 0 then
-            continue
-        end
-
-        local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
-        if not OnScreen then
-            continue
-        end
-
-        local Distance = (originPosition - ScreenPosition).Magnitude
-        if Distance <= (DistanceToMouse or radiusOption) then
-            local targetPartName
-            if targetPartOption == "Random" then
-                targetPartName = ValidTargetParts[math.random(1, #ValidTargetParts)]
-            else
-                targetPartName = targetPartOption
+    if targetPartOption ~= "None" then
+        for _, Player in next, GetPlayers(Players) do
+            if Player == LocalPlayer then
+                continue
             end
 
-            local candidatePart = Character[targetPartName]
-            if candidatePart then
-                ClosestPart = candidatePart
-                ClosestPlayer = Player
-                DistanceToMouse = Distance
+            if ignoredPlayers and ignoredPlayers[Player.Name] then
+                continue
+            end
+
+            if teamCheck and teamEvaluator(Player) then
+                continue
+            end
+
+            if visibleCheck and not IsPlayerVisible(Player) then
+                continue
+            end
+
+            local Character = Player.Character
+            if not Character then
+                continue
+            end
+
+            local HumanoidRootPart = FindFirstChild(Character, "HumanoidRootPart")
+            local Humanoid = FindFirstChild(Character, "Humanoid")
+
+            if not HumanoidRootPart or not Humanoid then
+                continue
+            end
+
+            if aliveCheck and Humanoid.Health <= 0 then
+                continue
+            end
+
+            local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
+            if not OnScreen then
+                continue
+            end
+
+            local Distance = (originPosition - ScreenPosition).Magnitude
+            if Distance <= (DistanceToMouse or radiusOption) then
+                local targetPartName
+                if targetPartOption == "Random" then
+                    targetPartName = ValidTargetParts[math.random(1, 2)]
+                else
+                    targetPartName = targetPartOption
+                end
+
+                local candidatePart = Character[targetPartName]
+                if candidatePart then
+                    ClosestPart = candidatePart
+                    ClosestPlayer = Player
+                    DistanceToMouse = Distance
+                end
+            end
+        end
+    end
+
+    if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
+        local camPos = Camera.CFrame.Position
+        local lookVector = Camera.CFrame.LookVector
+
+        for vehicle in pairs(VehicleCache) do
+            if not vehicle or not vehicle.Parent then continue end
+
+            local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
+            local TargetPart = body and FindFirstChild(body, vehiclePartOption)
+            
+            if TargetPart then
+                local targetDir = (TargetPart.Position - camPos).Unit
+                if lookVector:Dot(targetDir) < 0 then 
+                    continue 
+                end
+
+                local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
+                if OnScreen then
+                    local Dist = (originPosition - Pos).Magnitude
+                    if Dist <= (DistanceToMouse or radiusOption) then
+                        ClosestPart = TargetPart
+                        ClosestPlayer = vehicle
+                        DistanceToMouse = Dist
+                    end
+                end
             end
         end
     end
@@ -488,6 +562,7 @@ local function getNearestPlayerToMouse()
     if player and player ~= LocalPlayer then
         return player
     end
+
     return nil
 end
 
@@ -529,7 +604,6 @@ local function toggleLockOnPlayer(forceState)
     end
 end
 
--- [수정] 두 개로 찢어져 있던 카메라 연산 루프를 하나로 깔끔하게 통합하여 충돌 방지
 RunService.RenderStepped:Connect(function()
     if ScriptState.lockEnabled and not ScriptState.isLockedOn then
         acquireLockTarget()
@@ -553,8 +627,7 @@ RunService.RenderStepped:Connect(function()
 
         if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
             local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
-            
-            -- [수정] 원본 중반부에 흩어져 있던 안티락 리졸버 연산 로직을 이 위치에 결합
+
             if ScriptState.antiLockEnabled then
                 if ScriptState.resolverMethod == "Recalculate" then
                     predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
@@ -582,7 +655,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeA
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'PasteWare  |  github.com/FakeAngles',
+    Title = 'PasteWare | github.com/FakeAngles',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -597,6 +670,7 @@ local ExploitTab = Window:AddTab("Exploits")
 local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
 local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
+
 local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
 MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "None", NoUI = true, Text = "Menu keybind" })
@@ -892,6 +966,22 @@ Main:AddToggle("AliveCheck", {
     SilentAimSettings.AliveCheck = Toggles.AliveCheck.Value
 end)
 
+Main:AddToggle("TargetVehicles", {
+    Text = "Target Vehicles",
+    Default = SilentAimSettings.TargetVehicles,
+}):OnChanged(function()
+    SilentAimSettings.TargetVehicles = Toggles.TargetVehicles.Value
+end)
+
+Main:AddDropdown("VehicleTargetPart", {
+    AllowNull = false,
+    Text = "Vehicle Target Part",
+    Default = "TargetPart",
+    Values = {"TargetPart"}
+}):OnChanged(function()
+    SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
+end)
+
 Main:AddToggle("BulletTP", {
     Text = "Bullet Teleport",
     Default = SilentAimSettings.BulletTP,
@@ -912,7 +1002,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "Random"}
+    Values = {"Head", "HumanoidRootPart", "None", "Random"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
@@ -2412,6 +2502,7 @@ end)
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
 ScriptState.strafeMode, ScriptState.strafeTargetPart = "Horizontal", nil
+
 local function startTargetStrafe()
     local targetPart = getClosestPlayer()
     ScriptState.strafeTargetPart = targetPart
@@ -2440,6 +2531,7 @@ local function stopTargetStrafe()
     Camera.CameraSubject = LocalPlayer.Character.Humanoid
     ScriptState.strafeEnabled, ScriptState.strafeTargetPart = false, nil
 end
+
 targetStrafe:AddToggle("strafeToggle", {
     Text = "Target Strafe",
     Default = false,
@@ -2588,7 +2680,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [수정] 메인 스레드를 막아버리던 원본의 while true 루프를 task.spawn으로 격리하여 블로킹 에러 완전 해결
 task.spawn(function()
     while true do
         task.wait()
@@ -2639,7 +2730,6 @@ task.spawn(function()
                 end
             end
         else
-            -- [수정] NoClip이 꺼졌을 때 충돌 판정(CanCollide)을 정상적으로 다시 켜주는 예외 복구 로직 추가
             local character = LocalPlayer.Character
             if character and not ScriptState.isNoClipActive then
                 for _, v in pairs(character:GetDescendants()) do
@@ -2652,5 +2742,4 @@ task.spawn(function()
     end
 end)
 
--- [수정] 하단 블로킹이 해제되어 이제 기본 테마 매니저가 스크립트 실행 즉시 정상 작동함
 ThemeManager:LoadDefaultTheme()
