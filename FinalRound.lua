@@ -105,7 +105,7 @@ local ScriptState = getgenv().ScriptState
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "PasteWare | github.com/FakeAngles",
+    ClassName = "FinalRound | anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
     TeamCheck = false,
@@ -526,6 +526,10 @@ local function getClosestPlayer(config)
             local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
             local TargetPart = body and FindFirstChild(body, vehiclePartOption)
             
+            if not TargetPart then
+                TargetPart = vehicle:FindFirstChildOfClass("VehicleSeat") or vehicle:FindFirstChild("DriveSeat", true) or vehicle:FindFirstChild(vehiclePartOption, true) or vehicle.PrimaryPart
+            end
+
             if TargetPart then
                 local targetDir = (TargetPart.Position - camPos).Unit
                 if lookVector:Dot(targetDir) < 0 then 
@@ -655,7 +659,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeA
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'PasteWare | github.com/FakeAngles',
+    Title = 'FinalRound | anmultv1234',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -977,7 +981,7 @@ Main:AddDropdown("VehicleTargetPart", {
     AllowNull = false,
     Text = "Vehicle Target Part",
     Default = "TargetPart",
-    Values = {"TargetPart"}
+    Values = {"TargetPart", "VehicleSeat", "PrimaryPart"}
 }):OnChanged(function()
     SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
 end)
@@ -2726,15 +2730,6 @@ task.spawn(function()
                         if v:IsA("BasePart") and v.CanCollide then
                             v.CanCollide = false
                         end
-                    end
-                end
-            end
-        else
-            local character = LocalPlayer.Character
-            if character and not ScriptState.isNoClipActive then
-                for _, v in pairs(character:GetDescendants()) do
-                    if v:IsA("BasePart") and not v.CanCollide and v.Name ~= "HumanoidRootPart" then
-                        v.CanCollide = true
                     end
                 end
             end
