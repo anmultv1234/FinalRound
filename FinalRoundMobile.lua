@@ -787,6 +787,73 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
+local VehiclesButton = Instance.new("TextButton")
+VehiclesButton.Parent = ScreenGui
+VehiclesButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+VehiclesButton.Size = UDim2.new(0, 80, 0, 30)
+VehiclesButton.Position = UDim2.new(1, -100, 0.5, 65)
+VehiclesButton.Text = "VEHICLES"
+VehiclesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+VehiclesButton.Font = Enum.Font.Code
+VehiclesButton.TextSize = 14
+VehiclesButton.BorderSizePixel = 0
+VehiclesButton.Active = true
+
+local VehiclesUIStroke = Instance.new("UIStroke")
+VehiclesUIStroke.Thickness = 1.5
+VehiclesUIStroke.Color = Color3.fromRGB(255, 0, 0)
+VehiclesUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+VehiclesUIStroke.Parent = VehiclesButton
+
+VehiclesButton.MouseButton1Click:Connect(function()
+    SilentAimSettings.TargetVehicles = not SilentAimSettings.TargetVehicles
+    if Toggles and Toggles.TargetVehicles then
+        Toggles.TargetVehicles:SetValue(SilentAimSettings.TargetVehicles)
+    end
+    if SilentAimSettings.TargetVehicles then
+        VehiclesUIStroke.Color = Color3.fromRGB(0, 255, 0)
+    else
+        VehiclesUIStroke.Color = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+local vehDragging, vehDragInput, vehDragStart, vehStartPos
+local function vehUpdate(input)
+    local delta = input.Position - vehDragStart
+    VehiclesButton.Position = UDim2.new(
+        vehStartPos.X.Scale,
+        vehStartPos.X.Offset + delta.X,
+        vehStartPos.Y.Scale,
+        vehStartPos.Y.Offset + delta.Y
+    )
+end
+
+VehiclesButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        vehDragging = true
+        vehDragStart = input.Position
+        vehStartPos = VehiclesButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                vehDragging = false
+            end
+        end)
+    end
+end)
+
+VehiclesButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        vehDragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == vehDragInput and vehDragging then
+        vehUpdate(input)
+    end
+end)
+
 local lastAimLockKeyState = false
 local lastAimLockKeyMode = ScriptState.aimLockKeyMode
 
