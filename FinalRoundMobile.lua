@@ -518,6 +518,13 @@ local function getClosestPlayer(config)
 
             local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
             local TargetPart = body and FindFirstChild(body, vehiclePartOption)
+
+            if not TargetPart then
+                local partsFolder = FindFirstChild(vehicle, "Parts")
+                if partsFolder then
+                    TargetPart = FindFirstChild(partsFolder, vehiclePartOption)
+                end
+            end
             
             if TargetPart then
                 local targetDir = (TargetPart.Position - camPos).Unit
@@ -1195,7 +1202,7 @@ Main:AddDropdown("VehicleTargetPart", {
     AllowNull = false,
     Text = "Vehicle Target Part",
     Default = "TargetPart",
-    Values = {"TargetPart"}
+    Values = {"TargetPart", "PropellerBase", "PrimaryPart"}
 }):OnChanged(function()
     SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
 end)
