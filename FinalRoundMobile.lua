@@ -1330,6 +1330,27 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Tooltip = "Friend list",
         Multi = true
     })
+
+    Main:AddToggle("HitboxToggle", {
+        Text = "Hitbox Expander",
+        Default = ScriptState.HitboxEnabled,
+        Tooltip = "Expands player head size",
+        Callback = function(value)
+            ScriptState.HitboxEnabled = value
+        end
+    })
+
+    Main:AddSlider("HitboxSize", {
+        Text = "Hitbox Size",
+        Default = ScriptState.HitboxSize,
+        Min = 1,
+        Max = 20,
+        Rounding = 0,
+        Tooltip = "Adjust hitbox size",
+        Callback = function(value)
+            ScriptState.HitboxSize = value
+        end
+    })
 end
 
 local function removeOldHighlight()
