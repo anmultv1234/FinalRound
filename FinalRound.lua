@@ -98,6 +98,8 @@ if not getgenv().ScriptState then
         strafeMode = "Horizontal",
         strafeTargetPart = nil,
         originalCameraMode = nil,
+        HitboxEnabled = false,
+        HitboxSize = 10,
     }
 end
 
@@ -1130,6 +1132,27 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Tooltip = "Friend list",
         Multi = true
     })
+
+    Main:AddToggle("HitboxToggle", {
+        Text = "Hitbox Expander",
+        Default = ScriptState.HitboxEnabled,
+        Tooltip = "Expands player head size",
+        Callback = function(value)
+            ScriptState.HitboxEnabled = value
+        end
+    })
+
+    Main:AddSlider("HitboxSize", {
+        Text = "Hitbox Size",
+        Default = ScriptState.HitboxSize,
+        Min = 1,
+        Max = 20,
+        Rounding = 0,
+        Tooltip = "Adjust hitbox size",
+        Callback = function(value)
+            ScriptState.HitboxSize = value
+        end
+    })
 end
 
 local function removeOldHighlight()
@@ -1193,6 +1216,24 @@ task.spawn(function()
             fov_circle.Visible = Toggles.Visible.Value
             fov_circle.Color = Options.Color.Value
             fov_circle.Position = getFovOrigin()
+        end
+
+        if ScriptState.HitboxEnabled then
+            for _, v in pairs(Players:GetPlayers()) do
+                if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
+                    local part = v.Character.Head
+                    if part:IsA("BasePart") then
+                        pcall(function()
+                            part.Size = Vector3.new(ScriptState.HitboxSize, ScriptState.HitboxSize, ScriptState.HitboxSize)
+                            part.Transparency = 0.9
+                            part.Color = Color3.fromRGB(255, 255, 255)
+                            part.Material = Enum.Material.Neon
+                            part.CanCollide = false
+                            part.Massless = true
+                        end)
+                    end
+                end
+            end
         end
     end)
 end)
