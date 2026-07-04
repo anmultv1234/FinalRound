@@ -986,7 +986,17 @@ Main:AddDropdown("VehicleTargetPart", {
     AllowNull = false,
     Text = "Vehicle Target Part",
     Default = "TargetPart",
-    Values = {"TargetPart", "PropellerBase", "PrimaryPart"}
+    Values = {
+        "TargetPart", 
+        "PropellerBase", 
+        "PrimaryPart",
+        "SteeringPivotBase",
+        "RudderPivotBase",
+        "AileronLPivotBase",
+        "AileronRPivotBase",
+        "ElevatorLPivotBase",
+        "ElevatorRPivotBase"
+    }
 }):OnChanged(function()
     SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
 end)
