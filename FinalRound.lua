@@ -990,12 +990,7 @@ Main:AddDropdown("VehicleTargetPart", {
         "TargetPart", 
         "PropellerBase", 
         "PrimaryPart",
-        "SteeringPivotBase",
-        "RudderPivotBase",
-        "AileronLPivotBase",
-        "AileronRPivotBase",
-        "ElevatorLPivotBase",
-        "ElevatorRPivotBase"
+        "RudderPivotBase"
     }
 }):OnChanged(function()
     SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
