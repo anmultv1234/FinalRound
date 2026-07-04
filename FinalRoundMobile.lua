@@ -526,6 +526,10 @@ local function getClosestPlayer(config)
                 end
             end
             
+            if not TargetPart then
+                TargetPart = FindFirstChild(vehicle, vehiclePartOption)
+            end
+            
             if TargetPart then
                 local targetDir = (TargetPart.Position - camPos).Unit
                 if lookVector:Dot(targetDir) < 0 then 
@@ -794,70 +798,71 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
-local VehiclesButton = Instance.new("TextButton")
-VehiclesButton.Parent = ScreenGui
-VehiclesButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-VehiclesButton.Size = UDim2.new(0, 80, 0, 30)
-VehiclesButton.Position = UDim2.new(1, -100, 0.5, 65)
-VehiclesButton.Text = "VEHICLES"
-VehiclesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-VehiclesButton.Font = Enum.Font.Code
-VehiclesButton.TextSize = 14
-VehiclesButton.BorderSizePixel = 0
-VehiclesButton.Active = true
+local SilentAimButton = Instance.new("TextButton")
+SilentAimButton.Parent = ScreenGui
+SilentAimButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SilentAimButton.Size = UDim2.new(0, 80, 0, 30)
+SilentAimButton.Position = UDim2.new(1, -100, 0.5, 65)
+SilentAimButton.Text = "SILENTAIM"
+SilentAimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SilentAimButton.Font = Enum.Font.Code
+SilentAimButton.TextSize = 14
+SilentAimButton.BorderSizePixel = 0
+SilentAimButton.Active = true
 
-local VehiclesUIStroke = Instance.new("UIStroke")
-VehiclesUIStroke.Thickness = 1.5
-VehiclesUIStroke.Color = Color3.fromRGB(255, 0, 0)
-VehiclesUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-VehiclesUIStroke.Parent = VehiclesButton
+local SilentAimUIStroke = Instance.new("UIStroke")
+SilentAimUIStroke.Thickness = 1.5
+SilentAimUIStroke.Color = Color3.fromRGB(255, 0, 0)
+SilentAimUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+SilentAimUIStroke.Parent = SilentAimButton
 
-VehiclesButton.MouseButton1Click:Connect(function()
-    SilentAimSettings.TargetVehicles = not SilentAimSettings.TargetVehicles
-    if Toggles and Toggles.TargetVehicles then
-        Toggles.TargetVehicles:SetValue(SilentAimSettings.TargetVehicles)
+SilentAimButton.MouseButton1Click:Connect(function()
+    local newState = not SilentAimSettings.Enabled
+    SilentAimSettings.Enabled = newState
+    if Toggles and Toggles.silentAimEnabled then
+        Toggles.silentAimEnabled:SetValue(newState)
     end
-    if SilentAimSettings.TargetVehicles then
-        VehiclesUIStroke.Color = Color3.fromRGB(0, 255, 0)
+    if SilentAimSettings.Enabled then
+        SilentAimUIStroke.Color = Color3.fromRGB(0, 255, 0)
     else
-        VehiclesUIStroke.Color = Color3.fromRGB(255, 0, 0)
+        SilentAimUIStroke.Color = Color3.fromRGB(255, 0, 0)
     end
 end)
 
-local vehDragging, vehDragInput, vehDragStart, vehStartPos
-local function vehUpdate(input)
-    local delta = input.Position - vehDragStart
-    VehiclesButton.Position = UDim2.new(
-        vehStartPos.X.Scale,
-        vehStartPos.X.Offset + delta.X,
-        vehStartPos.Y.Scale,
-        vehStartPos.Y.Offset + delta.Y
+local saDragging, saDragInput, saDragStart, saStartPos
+local function saUpdate(input)
+    local delta = input.Position - saDragStart
+    SilentAimButton.Position = UDim2.new(
+        saStartPos.X.Scale,
+        saStartPos.X.Offset + delta.X,
+        saStartPos.Y.Scale,
+        saStartPos.Y.Offset + delta.Y
     )
 end
 
-VehiclesButton.InputBegan:Connect(function(input)
+SilentAimButton.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        vehDragging = true
-        vehDragStart = input.Position
-        vehStartPos = VehiclesButton.Position
+        saDragging = true
+        saDragStart = input.Position
+        saStartPos = SilentAimButton.Position
 
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
-                vehDragging = false
+                saDragging = false
             end
         end)
     end
 end)
 
-VehiclesButton.InputChanged:Connect(function(input)
+SilentAimButton.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        vehDragInput = input
+        saDragInput = input
     end
 end)
 
 game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == vehDragInput and vehDragging then
-        vehUpdate(input)
+    if input == saDragInput and saDragging then
+        saUpdate(input)
     end
 end)
 
@@ -1121,6 +1126,9 @@ local silentAimToggle = Main:AddToggle("silentAimEnabled", {
     Default = SilentAimSettings.Enabled,
     Callback = function(value)
         SilentAimSettings.Enabled = value
+        if SilentAimUIStroke then
+            SilentAimUIStroke.Color = value and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+        end
     end
 })
 
@@ -1202,7 +1210,7 @@ Main:AddDropdown("VehicleTargetPart", {
     AllowNull = false,
     Text = "Vehicle Target Part",
     Default = "TargetPart",
-    Values = {"TargetPart", "PropellerBase", "PrimaryPart"}
+    Values = {"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase"}
 }):OnChanged(function()
     SilentAimSettings.VehicleTargetPart = Options.VehicleTargetPart.Value
 end)
