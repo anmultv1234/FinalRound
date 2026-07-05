@@ -107,7 +107,7 @@ local ScriptState = getgenv().ScriptState
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "FinalRound | anmultv1234",
+    ClassName = "anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
     TeamCheck = false,
@@ -664,7 +664,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeA
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'FinalRound | anmultv1234',
+    Title = 'anmultv1234',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
