@@ -2685,4 +2685,217 @@ local function strafeAroundTarget()
     local targetPos = ScriptState.strafeTargetPart.Position
     local angle = tick() * (ScriptState.strafeSpeed / 10)
     local offset = ScriptState.strafeMode == "Horizontal"
-        and Vector3.new(math.cos(angle) * ScriptState.strafeRadius, 0, math.sin(
+        and Vector3.new(math.cos(angle) * ScriptState.strafeRadius, 0, math.sin(angle) * ScriptState.strafeRadius)
+        or Vector3.new(math.cos(angle) * ScriptState.strafeRadius, ScriptState.strafeRadius, math.sin(angle) * ScriptState.strafeRadius)
+    LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos + offset))
+    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, targetPos)
+end
+
+local function stopTargetStrafe()
+    Players.LocalPlayer.CameraMode = ScriptState.originalCameraMode or Enum.CameraMode.Classic
+    Camera.CameraSubject = LocalPlayer.Character.Humanoid
+    ScriptState.strafeEnabled, ScriptState.strafeTargetPart = false, nil
+end
+
+targetStrafe:AddToggle("strafeToggle", {
+    Text = "Target Strafe",
+    Default = false,
+    Tooltip = "Enable or disable Target Strafe.",
+    Callback = function(value)
+        ScriptState.strafeEnabled = value
+        if ScriptState.strafeEnabled then
+            startTargetStrafe()
+        else
+            stopTargetStrafe()
+        end
+    end
+}):AddKeyPicker("strafeToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Target Strafe",
+    Tooltip = "Key to toggle Target Strafe",
+    Callback = function(value)
+        ScriptState.strafeEnabled = value
+        if ScriptState.strafeEnabled then
+            startTargetStrafe()
+        else
+            stopTargetStrafe()
+        end
+    end
+})
+
+targetStrafe:AddDropdown("strafeModeDropdown", {
+    AllowNull = false,
+    Text = "Target Strafe Mode",
+    Default = "Horizontal",
+    Values = {"Horizontal", "UP"},
+    Tooltip = "Select the strafing mode.",
+    Callback = function(value) ScriptState.strafeMode = value end
+})
+
+targetStrafe:AddSlider("strafeRadiusSlider", {
+    Text = "Strafe Radius",
+    Default = 5,
+    Min = 1,
+    Max = 20,
+    Rounding = 1,
+    Tooltip = "Set the radius of movement around the target.",
+    Callback = function(value) ScriptState.strafeRadius = value end
+})
+
+targetStrafe:AddSlider("strafeSpeedSlider", {
+    Text = "Strafe Speed",
+    Default = 50,
+    Min = 10,
+    Max = 200,
+    Rounding = 1,
+    Tooltip = "Set the speed of strafing around the target.",
+    Callback = function(value) ScriptState.strafeSpeed = value end
+})
+
+local keybindWatchers = {}
+
+local function registerKeybindWatcher(toggleId, keyPickerId, handlers)
+    local toggle = Toggles[toggleId]
+    local keyPicker = Options[keyPickerId]
+
+    if not (toggle and keyPicker) then
+        return
+    end
+
+    local watcher = {
+        toggle = toggle,
+        keyPicker = keyPicker,
+        lastState = keyPicker:GetState(),
+        lastMode = keyPicker.Mode,
+        modeChanged = handlers and handlers.onModeChanged,
+        stateChanged = handlers and handlers.onStateChanged,
+    }
+
+    if toggle.Value ~= watcher.lastState then
+        toggle:SetValue(watcher.lastState)
+    elseif watcher.stateChanged then
+        watcher.stateChanged(watcher.lastState)
+    end
+
+    if watcher.modeChanged then
+        watcher.modeChanged(watcher.lastMode)
+    end
+
+    keyPicker:OnChanged(function()
+        watcher.lastMode = keyPicker.Mode
+        watcher.lastState = keyPicker:GetState()
+        if watcher.modeChanged then
+            watcher.modeChanged(watcher.lastMode)
+        end
+        if toggle.Value ~= watcher.lastState then
+            toggle:SetValue(watcher.lastState)
+        elseif watcher.stateChanged then
+            watcher.stateChanged(watcher.lastState)
+        end
+    end)
+
+    table.insert(keybindWatchers, watcher)
+end
+
+registerKeybindWatcher("silentAimEnabled", "silentAim_KeyPicker", {
+    onModeChanged = function(mode)
+        SilentAimSettings.KeyMode = mode or "Toggle"
+    end,
+    onStateChanged = function(state)
+        SilentAimSettings.Enabled = state
+        if silentAimToggle.Value ~= state then
+            silentAimToggle:SetValue(state)
+        end
+    end,
+})
+
+registerKeybindWatcher("speedEnabled", "speedToggleKey")
+registerKeybindWatcher("flyEnabled", "flyToggleKey")
+registerKeybindWatcher("noClipEnabled", "noClipToggleKey")
+registerKeybindWatcher("strafeToggle", "strafeToggleKey")
+
+RunService.RenderStepped:Connect(function()
+    for _, watcher in ipairs(keybindWatchers) do
+        local state = watcher.keyPicker:GetState()
+
+        if watcher.keyPicker.Mode ~= watcher.lastMode then
+            watcher.lastMode = watcher.keyPicker.Mode
+            if watcher.modeChanged then
+                watcher.modeChanged(watcher.lastMode)
+            end
+            state = watcher.keyPicker:GetState()
+        end
+
+        if state ~= watcher.lastState then
+            watcher.lastState = state
+            if watcher.toggle.Value ~= state then
+                watcher.toggle:SetValue(state)
+            elseif watcher.stateChanged then
+                watcher.stateChanged(state)
+            end
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if ScriptState.strafeEnabled then
+        strafeAroundTarget()
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait()
+
+        if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+            if character and rootPart then
+                humanoid = character:FindFirstChild("Humanoid")
+
+                if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+                    local moveDirection = humanoid.MoveDirection.Unit
+                    rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
+                end
+
+                if ScriptState.isFlyActive then
+                    local flyDirection = Vector3.zero
+
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                        flyDirection = flyDirection + Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                        flyDirection = flyDirection - Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                        flyDirection = flyDirection - Camera.CFrame.RightVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                        flyDirection = flyDirection + Camera.CFrame.RightVector
+                    end
+
+                    if flyDirection.Magnitude > 0 then
+                        flyDirection = flyDirection.Unit
+                    end
+
+                    local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
+                    rootPart.CFrame = CFrame.new(newPosition)
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+                end
+
+                if ScriptState.isNoClipActive then
+                    for _, v in pairs(character:GetDescendants()) do
+                        if v:IsA("BasePart") and v.CanCollide then
+                            v.CanCollide = false
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+ThemeManager:LoadDefaultTheme()
