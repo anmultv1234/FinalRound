@@ -5,6 +5,8 @@ if UIS.TouchEnabled and not UIS.MouseEnabled and not UIS.KeyboardEnabled then
     return
 end
 
+getgenv().bypass_adonis = true
+
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
@@ -107,7 +109,7 @@ local ScriptState = getgenv().ScriptState
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "anmultv1234",
+    ClassName = "FinalRound | anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
     TeamCheck = false,
@@ -167,15 +169,20 @@ local GetMouseLocation = UserInputService.GetMouseLocation
 local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
-local fov_circle = Drawing.new("Circle")
-fov_circle.Thickness = 1
-fov_circle.NumSides = 100
-fov_circle.Radius = 180
-fov_circle.Filled = false
-fov_circle.Visible = false
-fov_circle.ZIndex = 999
-fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(54, 57, 241)
+local fov_circle = nil
+if Drawing and Drawing.new then
+    pcall(function()
+        fov_circle = Drawing.new("Circle")
+        fov_circle.Thickness = 1
+        fov_circle.NumSides = 100
+        fov_circle.Radius = 180
+        fov_circle.Filled = false
+        fov_circle.Visible = false
+        fov_circle.ZIndex = 999
+        fov_circle.Transparency = 1
+        fov_circle.Color = Color3.fromRGB(54, 57, 241)
+    end)
+end
 
 local ExpectedArguments = {
     ViewportPointToRay = {
@@ -418,6 +425,20 @@ workspace.ChildAdded:Connect(function(child)
     end
 end)
 
+local function GetPlayerVehicle(player)
+    if not player or not player.Character then return nil end
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.SeatPart then
+        local currentSeat = humanoid.SeatPart
+        for vehicle, _ in pairs(VehicleCache) do
+            if typeof(vehicle) == "Instance" and currentSeat:IsDescendantOf(vehicle) then
+                return vehicle.Name
+            end
+        end
+    end
+    return nil
+end
+
 local function getClosestPlayer(config)
     config = config or {}
 
@@ -534,6 +555,10 @@ local function getClosestPlayer(config)
                     TargetPart = FindFirstChild(partsFolder, vehiclePartOption)
                 end
             end
+
+            if not TargetPart then
+                TargetPart = FindFirstChild(vehicle, vehiclePartOption)
+            end
             
             if TargetPart then
                 local targetDir = (TargetPart.Position - camPos).Unit
@@ -608,7 +633,7 @@ local function toggleLockOnPlayer(forceState)
         ScriptState.targetPlayer = nil
     end
 
-    if Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
+    if Toggles and Toggles.aimLockKeyToggle and Toggles.aimLockKeyToggle.Value ~= desiredState then
         Toggles.aimLockKeyToggle:SetValue(desiredState)
     end
 end
@@ -664,7 +689,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeA
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWareUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
-    Title = 'anmultv1234',
+    Title = 'FinalRound | anmultv1234',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -677,6 +702,7 @@ local velbox = GeneralTab:AddRightGroupbox("Anti Lock")
 local frabox = GeneralTab:AddRightGroupbox("Movement")
 local ExploitTab = Window:AddTab("Exploits")
 local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
+local VehicleModBox = ExploitTab:AddRightGroupbox("Vehicle Modifier")
 local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
 
@@ -1108,7 +1134,9 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
         :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
         :OnChanged(function()
-            fov_circle.Visible = Toggles.Visible.Value
+            if fov_circle then
+                fov_circle.Visible = Toggles.Visible.Value
+            end
             SilentAimSettings.FOVVisible = Toggles.Visible.Value
         end)
 
@@ -1119,7 +1147,9 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Default = 130,
         Rounding = 0
     }):OnChanged(function()
-        fov_circle.Radius = Options.Radius.Value
+        if fov_circle then
+            fov_circle.Radius = Options.Radius.Value
+        end
         SilentAimSettings.FOVRadius = Options.Radius.Value
     end)
 
@@ -1166,6 +1196,8 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         end
     })
 end
+
+local VehicleDrawings = {}
 
 local function removeOldHighlight()
     if ScriptState.previousHighlight then
@@ -1224,9 +1256,11 @@ task.spawn(function()
                 removeOldHighlight()
             end
         end
-        if Toggles.Visible.Value then
+        if fov_circle and Toggles.Visible and Toggles.Visible.Value then
             fov_circle.Visible = Toggles.Visible.Value
-            fov_circle.Color = Options.Color.Value
+            if Options.Color then
+                fov_circle.Color = Options.Color.Value
+            end
             fov_circle.Position = getFovOrigin()
         end
 
@@ -1243,6 +1277,47 @@ task.spawn(function()
                             part.CanCollide = false
                             part.Massless = true
                         end)
+                    end
+                end
+            end
+        end
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local hasDrawing = typeof(Drawing) == "table" and typeof(Drawing.new) == "function"
+                if hasDrawing then
+                    if not VehicleDrawings[player] then
+                        local d = Drawing.new("Text")
+                        d.Center = true
+                        d.Outline = true
+                        d.Color = Color3.new(1, 1, 1)
+                        d.Size = 16
+                        d.Visible = false
+                        VehicleDrawings[player] = d
+                    end
+                    
+                    local d = VehicleDrawings[player]
+                    local ESP_Global = getgenv().ExunysDeveloperESP
+                    local espProps = ESP_Global and ESP_Global.Properties and ESP_Global.Properties.ESP
+                    local showVehicle = espProps and espProps.DisplayVehicle
+                    local espOn = ESP_Global and ESP_Global.Settings and ESP_Global.Settings.Enabled
+
+                    if showVehicle and espOn and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local vName = GetPlayerVehicle(player)
+                        if vName then
+                            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position - Vector3.new(0, 4, 0))
+                            if onScreen then
+                                d.Text = "[" .. vName .. "]"
+                                d.Position = Vector2.new(pos.X, pos.Y)
+                                d.Visible = true
+                            else
+                                d.Visible = false
+                            end
+                        else
+                            d.Visible = false
+                        end
+                    else
+                        if d then d.Visible = false end
                     end
                 end
             end
@@ -1762,11 +1837,27 @@ end)
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
 
 if not _G.ExunysESPLoaded then
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
+    end)
 end
 
 local ESP = getgenv().ExunysDeveloperESP
-if not ESP then return end
+if not ESP then
+    ESP = {
+        Settings = {},
+        Properties = {
+            ESP = { DisplayVehicle = true },
+            Tracer = {},
+            HeadDot = {},
+            Box = {},
+            HealthBar = {},
+            Crosshair = { CenterDot = {} }
+        },
+        DeveloperSettings = {}
+    }
+    getgenv().ExunysDeveloperESP = ESP
+end
 
 local function ensurePath(path)
     local ref = ESP
@@ -1982,7 +2073,8 @@ addDefinitionControls(ESPVisualGroup, {
     {Type = "toggle", Name = "Display Health", Path = {"Properties", "ESP", "DisplayHealth"}},
     {Type = "toggle", Name = "Display Name", Path = {"Properties", "ESP", "DisplayName"}},
     {Type = "toggle", Name = "Display DisplayName", Path = {"Properties", "ESP", "DisplayDisplayName"}},
-    {Type = "toggle", Name = "Display Tool", Path = {"Properties", "ESP", "DisplayTool"}}
+    {Type = "toggle", Name = "Display Tool", Path = {"Properties", "ESP", "DisplayTool"}},
+    {Type = "toggle", Name = "Display Vehicle", Path = {"Properties", "ESP", "DisplayVehicle"}, Default = true}
 })
 
 local TracerGroup = VisualsTab:AddRightGroupbox("ESP Tracer")
@@ -2204,9 +2296,13 @@ end
 
 local function TrackPlayer(player)
     player:GetPropertyChangedSignal("Team"):Connect(function()
-        if AdornmentsCache[player] then
-            for _, ad in pairs(AdornmentsCache[player]) do
-                ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+        if player.Character then
+            for _, part in pairs(player.Character:GetChildren()) do
+                if AdornmentsCache[part] then
+                    for _, ad in pairs(AdornmentsCache[part]) do
+                        ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+                    end
+                end
             end
         end
     end)
