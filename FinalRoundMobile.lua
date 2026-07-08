@@ -95,6 +95,8 @@ if not getgenv().ScriptState then
     }
 end
 
+local ScriptState = getgenv().ScriptState
+
 local SilentAimSettings = {
     Enabled = false,
     ClassName = "FinalRound  |  anmultv1234",
@@ -157,15 +159,20 @@ local GetMouseLocation = UserInputService.GetMouseLocation
 local ValidTargetParts = {"Head", "HumanoidRootPart", "None"}
 local PredictionAmount = 0.165
 
-local fov_circle = Drawing.new("Circle")
-fov_circle.Thickness = 1
-fov_circle.NumSides = 100
-fov_circle.Radius = 180
-fov_circle.Filled = false
-fov_circle.Visible = false
-fov_circle.ZIndex = 999
-fov_circle.Transparency = 1
-fov_circle.Color = Color3.fromRGB(54, 57, 241)
+local fov_circle = nil
+if Drawing and Drawing.new then
+    pcall(function()
+        fov_circle = Drawing.new("Circle")
+        fov_circle.Thickness = 1
+        fov_circle.NumSides = 100
+        fov_circle.Radius = 180
+        fov_circle.Filled = false
+        fov_circle.Visible = false
+        fov_circle.ZIndex = 999
+        fov_circle.Transparency = 1
+        fov_circle.Color = Color3.fromRGB(54, 57, 241)
+    end)
+end
 
 local ExpectedArguments = {
     ViewportPointToRay = {
@@ -243,7 +250,6 @@ local function getFovOrigin()
         local viewportSize = Camera.ViewportSize
         return Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
     end
-
     return getMousePosition()
 end
 
@@ -408,6 +414,20 @@ workspace.ChildAdded:Connect(function(child)
         setupGameSystems(child)
     end
 end)
+
+local function GetPlayerVehicle(player)
+    if not player or not player.Character then return nil end
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.SeatPart then
+        local currentSeat = humanoid.SeatPart
+        for vehicle, _ in pairs(VehicleCache) do
+            if typeof(vehicle) == "Instance" and currentSeat:IsDescendantOf(vehicle) then
+                return vehicle.Name
+            end
+        end
+    end
+    return nil
+end
 
 local function getClosestPlayer(config)
     config = config or {}
@@ -1302,7 +1322,9 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
         :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
         :OnChanged(function()
-            fov_circle.Visible = Toggles.Visible.Value
+            if fov_circle then
+                fov_circle.Visible = Toggles.Visible.Value
+            end
             SilentAimSettings.FOVVisible = Toggles.Visible.Value
         end)
 
@@ -1313,7 +1335,9 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Default = 130,
         Rounding = 0
     }):OnChanged(function()
-        fov_circle.Radius = Options.Radius.Value
+        if fov_circle then
+            fov_circle.Radius = Options.Radius.Value
+        end
         SilentAimSettings.FOVRadius = Options.Radius.Value
     end)
 
@@ -1339,6 +1363,8 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Multi = true
     })
 end
+
+local VehicleDrawings = {}
 
 local function removeOldHighlight()
     if ScriptState.previousHighlight then
@@ -1397,13 +1423,57 @@ task.spawn(function()
                 removeOldHighlight()
             end
         end
-        if Toggles.Visible.Value then
+        if fov_circle and Toggles.Visible and Toggles.Visible.Value then
             fov_circle.Visible = Toggles.Visible.Value
-            fov_circle.Color = Options.Color.Value
+            if Options.Color then
+                fov_circle.Color = Options.Color.Value
+            end
             fov_circle.Position = getFovOrigin()
+        end
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local hasDrawing = typeof(Drawing) == "table" and typeof(Drawing.new) == "function"
+                if hasDrawing then
+                    if not VehicleDrawings[player] then
+                        local d = Drawing.new("Text")
+                        d.Center = true
+                        d.Outline = true
+                        d.Color = Color3.new(1, 1, 1)
+                        d.Size = 16
+                        d.Visible = false
+                        VehicleDrawings[player] = d
+                    end
+                    
+                    local d = VehicleDrawings[player]
+                    local ESP_Global = getgenv().ExunysDeveloperESP
+                    local espProps = ESP_Global and ESP_Global.Properties and ESP_Global.Properties.ESP
+                    local showVehicle = espProps and espProps.DisplayVehicle
+                    local espOn = ESP_Global and ESP_Global.Settings and ESP_Global.Settings.Enabled
+
+                    if showVehicle and espOn and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local vName = GetPlayerVehicle(player)
+                        if vName then
+                            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position - Vector3.new(0, 4, 0))
+                            if onScreen then
+                                d.Text = "[" .. vName .. "]"
+                                d.Position = Vector2.new(pos.X, pos.Y)
+                                d.Visible = true
+                            else
+                                d.Visible = false
+                            end
+                        else
+                            d.Visible = false
+                        end
+                    else
+                        if d then d.Visible = false end
+                    end
+                end
+            end
         end
     end)
 end)
+
 local sounds = {
     ["RIFK7"] = "rbxassetid://9102080552",
     ["Bubble"] = "rbxassetid://9102092728",
@@ -1916,11 +1986,27 @@ end)
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
 
 if not _G.ExunysESPLoaded then
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare-v2/refs/heads/main/ExLib.lua"))()
+    end)
 end
 
 local ESP = getgenv().ExunysDeveloperESP
-if not ESP then return end
+if not ESP then
+    ESP = {
+        Settings = {},
+        Properties = {
+            ESP = { DisplayVehicle = true },
+            Tracer = {},
+            HeadDot = {},
+            Box = {},
+            HealthBar = {},
+            Crosshair = { CenterDot = {} }
+        },
+        DeveloperSettings = {}
+    }
+    getgenv().ExunysDeveloperESP = ESP
+end
 
 local function ensurePath(path)
     local ref = ESP
@@ -2136,7 +2222,8 @@ addDefinitionControls(ESPVisualGroup, {
     {Type = "toggle", Name = "Display Health", Path = {"Properties", "ESP", "DisplayHealth"}},
     {Type = "toggle", Name = "Display Name", Path = {"Properties", "ESP", "DisplayName"}},
     {Type = "toggle", Name = "Display DisplayName", Path = {"Properties", "ESP", "DisplayDisplayName"}},
-    {Type = "toggle", Name = "Display Tool", Path = {"Properties", "ESP", "DisplayTool"}}
+    {Type = "toggle", Name = "Display Tool", Path = {"Properties", "ESP", "DisplayTool"}},
+    {Type = "toggle", Name = "Display Vehicle", Path = {"Properties", "ESP", "DisplayVehicle"}, Default = true}
 })
 
 local TracerGroup = VisualsTab:AddRightGroupbox("ESP Tracer")
@@ -2358,9 +2445,13 @@ end
 
 local function TrackPlayer(player)
     player:GetPropertyChangedSignal("Team"):Connect(function()
-        if AdornmentsCache[player] then
-            for _, ad in pairs(AdornmentsCache[player]) do
-                ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+        if player.Character then
+            for _, part in pairs(player.Character:GetChildren()) do
+                if AdornmentsCache[part] then
+                    for _, ad in pairs(AdornmentsCache[part]) do
+                        ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+                    end
+                end
             end
         end
     end)
@@ -2885,55 +2976,57 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-while true do
-    task.wait()
+task.spawn(function()
+    while true do
+        task.wait()
 
-    if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
-        local character = LocalPlayer.Character
-        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        if ScriptState.isSpeedActive or ScriptState.isFlyActive or ScriptState.isNoClipActive then
+            local character = LocalPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 
-        if character and rootPart then
-            humanoid = character:FindFirstChild("Humanoid")
+            if character and rootPart then
+                humanoid = character:FindFirstChild("Humanoid")
 
-            if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                local moveDirection = humanoid.MoveDirection.Unit
-                rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
-            end
-
-            if ScriptState.isFlyActive then
-                local flyDirection = Vector3.zero
-
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                    flyDirection = flyDirection + Camera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                    flyDirection = flyDirection - Camera.CFrame.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                    flyDirection = flyDirection - Camera.CFrame.RightVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                    flyDirection = flyDirection + Camera.CFrame.RightVector
+                if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+                    local moveDirection = humanoid.MoveDirection.Unit
+                    rootPart.CFrame = rootPart.CFrame + moveDirection * ScriptState.Cmultiplier
                 end
 
-                if flyDirection.Magnitude > 0 then
-                    flyDirection = flyDirection.Unit
+                if ScriptState.isFlyActive then
+                    local flyDirection = Vector3.zero
+
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                        flyDirection = flyDirection + Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                        flyDirection = flyDirection - Camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                        flyDirection = flyDirection - Camera.CFrame.RightVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                        flyDirection = flyDirection + Camera.CFrame.RightVector
+                    end
+
+                    if flyDirection.Magnitude > 0 then
+                        flyDirection = flyDirection.Unit
+                    end
+
+                    local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
+                    rootPart.CFrame = CFrame.new(newPosition)
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
                 end
 
-                local newPosition = rootPart.Position + flyDirection * ScriptState.flySpeed
-                rootPart.CFrame = CFrame.new(newPosition)
-                rootPart.Velocity = Vector3.new(0, 0, 0)
-            end
-
-            if ScriptState.isNoClipActive then
-                for _, v in pairs(character:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then
-                        v.CanCollide = false
+                if ScriptState.isNoClipActive then
+                    for _, v in pairs(character:GetDescendants()) do
+                        if v:IsA("BasePart") and v.CanCollide then
+                            v.CanCollide = false
+                        end
                     end
                 end
             end
         end
     end
-end
+end)
 
 ThemeManager:LoadDefaultTheme()
