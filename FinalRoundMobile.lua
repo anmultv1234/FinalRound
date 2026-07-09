@@ -1986,8 +1986,7 @@ end)
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
 
 if not _G.ExunysESPLoaded then
-    pcall(function()
-     loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ExLib.lua"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ExLib.lua"))()
     end)
 end
 
