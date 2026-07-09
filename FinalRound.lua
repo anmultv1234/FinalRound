@@ -109,7 +109,7 @@ local ScriptState = getgenv().ScriptState
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "FinalRound | anmultv1234",
+    ClassName = "anmultv1234",
     ToggleKey = "None",
     KeyMode = "Toggle",
     TeamCheck = false,
