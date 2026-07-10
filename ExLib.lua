@@ -30,20 +30,14 @@ end
 --// Custom Drawing Library
 
 if not Drawing or not Drawing.new or not Drawing.Fonts then
-	local drawCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/drawing.lua")
-	local drawFunc = loadstring(drawCode)
-	if drawFunc then
-		drawFunc()
-	end
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/drawing.lua"))()
 
 	repeat
 		wait(0)
 	until Drawing and Drawing.new and type(Drawing.new) == "function" and Drawing.Fonts and type(Drawing.Fonts) == "table"
 end
 
-local configCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/EspMain.lua")
-local configFunc = loadstring(configCode)
-local ConfigLibrary = configFunc and configFunc() or nil
+local ConfigLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/EspMain.lua"))()
 
 local Vector2new, Vector3zero, CFramenew = Vector2.new, Vector3.zero, CFrame.new
 local Drawingnew, DrawingFonts = Drawing.new, Drawing.Fonts
@@ -72,16 +66,12 @@ end, function(self, Index, Value)
 	self[Index] = Value
 end
 
-local currentExecutor = type(identifyexecutor) == "function" and identifyexecutor() or "Unknown"
-
-if currentExecutor == "Solara" then -- Quads are broken on Solara.
-	local quadCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ESPMainQuad.lua")
-	local quadFunc = loadstring(quadCode)
-	local DrawQuad = quadFunc and quadFunc() or nil
+if identifyexecutor() == "Solara" then -- Quads are broken on Solara.
+	local DrawQuad = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ESPMainQuad.lua"))()
 	local _Drawingnew = clonefunction(Drawing.new)
 
 	Drawingnew = function(...)
-		return ({...})[1] == "Quad" and DrawQuad and DrawQuad(...) or _Drawingnew(...)
+		return ({...})[1] == "Quad" and DrawQuad(...) or _Drawingnew(...)
 	end
 end
 
@@ -136,24 +126,7 @@ end
 
 local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 
---[=[
-local Degrade = (function()
-	if getrawmetatable and getupvalue then
-		if not select(2, pcall(getrawmetatable(game).__index, Players, "LocalPlayer")) then
-			local TemporaryDrawing = Drawingnew("Line")
-
-			if TemporaryDrawing--[[._OBJECT]] then
-				local __index_render = getupvalue(getmetatable(TemporaryDrawing).__index, 4)
-
-				if __index_render and __index_render(TemporaryDrawing, "Thickness") == 1 then
-					return false -- No degrading, meaning the exploit fully supports the optimizations for the module.
-				end
-			end
-		end
-	end
-
-	return true
-end)()
+local Degrade = true
 
 do
 	local TemporaryConnection = Connect(__index(game, "DescendantAdded"), function() end)
@@ -171,7 +144,7 @@ else
 	local _Drawingnew = clonefunction(Drawing.new)
 
 	local TemporaryDrawing = Drawingnew("Line")
-	local Executor = identifyexecutor()
+	local Executor = (type(identifyexecutor) == "function" and identifyexecutor()) or "Madium"
 	local SupportsObject, RenderObjectMetatable = (stringfind(Executor, "Wave") or stringfind(Executor, "Synapse Z")) or TemporaryDrawing--[[._OBJECT]]
 
 	TemporaryDrawing.Remove(TemporaryDrawing)
@@ -204,7 +177,6 @@ else
 
 	warn("EXUNYS_ESP > Your exploit does not support this module's optimizations! The visuals might be laggy and decrease performance.")
 end
-]=]
 
 --// Variables
 
