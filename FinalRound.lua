@@ -542,59 +542,59 @@ local function getClosestPlayer(config)
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
         local camPos = Camera.CFrame.Position
         local lookVector = Camera.CFrame.LookVector
-        local localHumanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        local localSeat = localHumanoid and localHumanoid.SeatPart
-
-        for vehicle in pairs(VehicleCache) do
-            if not vehicle or not vehicle.Parent then continue end
-            if localSeat and localSeat:IsDescendantOf(vehicle) then continue end
-
-            local skipVehicle = false
-            if ignoredPlayers then
-                for playerName, isIgnored in pairs(ignoredPlayers) do
-                    if isIgnored then
-                        local p = Players:FindFirstChild(playerName)
-                        if p and p.Character then
-                            local h = p.Character:FindFirstChildOfClass("Humanoid")
-                            if h and h.SeatPart and h.SeatPart:IsDescendantOf(vehicle) then
-                                skipVehicle = true
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-            if skipVehicle then continue end
-
-            local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
-            if not TargetPart or not TargetPart:IsA("BasePart") then
-                TargetPart = vehicle.PrimaryPart
-                if not TargetPart then
-                    TargetPart = vehicle:FindFirstChild("Body", true) or vehicle:FindFirstChild("DriveSeat", true)
-                end
-                if not TargetPart then
-                    for _, desc in ipairs(vehicle:GetDescendants()) do
-                        if desc:IsA("BasePart") then
-                            TargetPart = desc
+        
+        local IgnoredVehicleInstances = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LocalPlayer or (ignoredPlayers and ignoredPlayers[p.Name]) then
+                local char = p.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum and hum.SeatPart then
+                    for vehicle in pairs(VehicleCache) do
+                        if hum.SeatPart:IsDescendantOf(vehicle) then
+                            IgnoredVehicleInstances[vehicle] = true
                             break
                         end
                     end
                 end
             end
-            
-            if TargetPart then
-                local targetDir = (TargetPart.Position - camPos).Unit
-                if lookVector:Dot(targetDir) < 0 then 
-                    continue 
-                end
+        end
 
-                local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
-                if OnScreen then
-                    local Dist = (originPosition - Pos).Magnitude
-                    if Dist <= (DistanceToMouse or radiusOption) then
-                        ClosestPart = TargetPart
-                        ClosestPlayer = vehicle
-                        DistanceToMouse = Dist
+        for vehicle in pairs(VehicleCache) do
+            if not vehicle or not vehicle.Parent or IgnoredVehicleInstances[vehicle] then continue end
+
+            local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
+            
+            if not TargetPart then
+                for _, pName in ipairs({"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase"}) do
+                    TargetPart = vehicle:FindFirstChild(pName, true)
+                    if TargetPart then break end
+                end
+            end
+
+            if not TargetPart then
+                TargetPart = vehicle:FindFirstChild("Body", true) or vehicle:FindFirstChild("Engine", true) or vehicle:FindFirstChild("Chassis", true) or vehicle:FindFirstChild("Hull", true)
+            end
+            
+            if not TargetPart then
+                for _, child in ipairs(vehicle:GetDescendants()) do
+                    if child:IsA("BasePart") then
+                        TargetPart = child
+                        break
+                    end
+                end
+            end
+            
+            if TargetPart and TargetPart:IsA("BasePart") then
+                local targetDir = (TargetPart.Position - camPos).Unit
+                if lookVector:Dot(targetDir) > 0 then 
+                    local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
+                    if OnScreen then
+                        local Dist = (originPosition - Pos).Magnitude
+                        if Dist <= (DistanceToMouse or radiusOption) then
+                            ClosestPart = TargetPart
+                            ClosestPlayer = vehicle
+                            DistanceToMouse = Dist
+                        end
                     end
                 end
             end
