@@ -126,7 +126,24 @@ end
 
 local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 
-local Degrade = true
+--[=[
+local Degrade = (function()
+	if getrawmetatable and getupvalue then
+		if not select(2, pcall(getrawmetatable(game).__index, Players, "LocalPlayer")) then
+			local TemporaryDrawing = Drawingnew("Line")
+
+			if TemporaryDrawing--[[._OBJECT]] then
+				local __index_render = getupvalue(getmetatable(TemporaryDrawing).__index, 4)
+
+				if __index_render and __index_render(TemporaryDrawing, "Thickness") == 1 then
+					return false -- No degrading, meaning the exploit fully supports the optimizations for the module.
+				end
+			end
+		end
+	end
+
+	return true
+end)()
 
 do
 	local TemporaryConnection = Connect(__index(game, "DescendantAdded"), function() end)
@@ -144,7 +161,7 @@ else
 	local _Drawingnew = clonefunction(Drawing.new)
 
 	local TemporaryDrawing = Drawingnew("Line")
-	local Executor = (type(identifyexecutor) == "function" and identifyexecutor()) or "Madium"
+	local Executor = identifyexecutor()
 	local SupportsObject, RenderObjectMetatable = (stringfind(Executor, "Wave") or stringfind(Executor, "Synapse Z")) or TemporaryDrawing--[[._OBJECT]]
 
 	TemporaryDrawing.Remove(TemporaryDrawing)
@@ -177,6 +194,7 @@ else
 
 	warn("EXUNYS_ESP > Your exploit does not support this module's optimizations! The visuals might be laggy and decrease performance.")
 end
+]=]
 
 --// Variables
 
