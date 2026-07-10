@@ -30,14 +30,20 @@ end
 --// Custom Drawing Library
 
 if not Drawing or not Drawing.new or not Drawing.Fonts then
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/drawing.lua"))()
+	local drawCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/drawing.lua")
+	local drawFunc = loadstring(drawCode)
+	if drawFunc then
+		drawFunc()
+	end
 
 	repeat
 		wait(0)
 	until Drawing and Drawing.new and type(Drawing.new) == "function" and Drawing.Fonts and type(Drawing.Fonts) == "table"
 end
 
-local ConfigLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/EspMain.lua"))()
+local configCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/EspMain.lua")
+local configFunc = loadstring(configCode)
+local ConfigLibrary = configFunc and configFunc() or nil
 
 local Vector2new, Vector3zero, CFramenew = Vector2.new, Vector3.zero, CFrame.new
 local Drawingnew, DrawingFonts = Drawing.new, Drawing.Fonts
@@ -66,12 +72,16 @@ end, function(self, Index, Value)
 	self[Index] = Value
 end
 
-if identifyexecutor() == "Solara" then -- Quads are broken on Solara.
-	local DrawQuad = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ESPMainQuad.lua"))()
+local currentExecutor = type(identifyexecutor) == "function" and identifyexecutor() or "Unknown"
+
+if currentExecutor == "Solara" then -- Quads are broken on Solara.
+	local quadCode = game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/ESPMainQuad.lua")
+	local quadFunc = loadstring(quadCode)
+	local DrawQuad = quadFunc and quadFunc() or nil
 	local _Drawingnew = clonefunction(Drawing.new)
 
 	Drawingnew = function(...)
-		return ({...})[1] == "Quad" and DrawQuad(...) or _Drawingnew(...)
+		return ({...})[1] == "Quad" and DrawQuad and DrawQuad(...) or _Drawingnew(...)
 	end
 end
 
