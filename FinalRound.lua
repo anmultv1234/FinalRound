@@ -542,22 +542,44 @@ local function getClosestPlayer(config)
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
         local camPos = Camera.CFrame.Position
         local lookVector = Camera.CFrame.LookVector
+        local localHumanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local localSeat = localHumanoid and localHumanoid.SeatPart
 
         for vehicle in pairs(VehicleCache) do
             if not vehicle or not vehicle.Parent then continue end
+            if localSeat and localSeat:IsDescendantOf(vehicle) then continue end
 
-            local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
-            local TargetPart = body and FindFirstChild(body, vehiclePartOption)
-
-            if not TargetPart then
-                local partsFolder = FindFirstChild(vehicle, "Parts")
-                if partsFolder then
-                    TargetPart = FindFirstChild(partsFolder, vehiclePartOption)
+            local skipVehicle = false
+            if ignoredPlayers then
+                for playerName, isIgnored in pairs(ignoredPlayers) do
+                    if isIgnored then
+                        local p = Players:FindFirstChild(playerName)
+                        if p and p.Character then
+                            local h = p.Character:FindFirstChildOfClass("Humanoid")
+                            if h and h.SeatPart and h.SeatPart:IsDescendantOf(vehicle) then
+                                skipVehicle = true
+                                break
+                            end
+                        end
+                    end
                 end
             end
+            if skipVehicle then continue end
 
-            if not TargetPart then
-                TargetPart = FindFirstChild(vehicle, vehiclePartOption)
+            local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
+            if not TargetPart or not TargetPart:IsA("BasePart") then
+                TargetPart = vehicle.PrimaryPart
+                if not TargetPart then
+                    TargetPart = vehicle:FindFirstChild("Body", true) or vehicle:FindFirstChild("DriveSeat", true)
+                end
+                if not TargetPart then
+                    for _, desc in ipairs(vehicle:GetDescendants()) do
+                        if desc:IsA("BasePart") then
+                            TargetPart = desc
+                            break
+                        end
+                    end
+                end
             end
             
             if TargetPart then
@@ -2993,5 +3015,3 @@ task.spawn(function()
         end
     end
 end)
-
-ThemeManager:LoadDefaultTheme()
