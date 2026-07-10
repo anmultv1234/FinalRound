@@ -213,7 +213,7 @@ local ExpectedArguments = {
 
 function CalculateChance(Percentage)
     Percentage = math.floor(Percentage)
-    local chance = math.floor(Random.new():NextNumber(0, 1) * 100) / 100
+    local chance = math.floor(Random.new().NextNumber(Random.new(), 0, 1) * 100) / 100
     return chance <= Percentage / 100
 end
 
@@ -384,35 +384,38 @@ SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
 local VehicleCache = {}
 
-local function findBestPart(vehicle)
-    local vehiclePartOption = SilentAimSettings.VehicleTargetPart or "TargetPart"
-    local targetPart = vehicle:FindFirstChild(vehiclePartOption, true)
-    
-    if not targetPart then
-        for _, pName in ipairs({"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase", "Body", "Engine", "Chassis", "Hull"}) do
-            targetPart = vehicle:FindFirstChild(pName, true)
-            if targetPart and targetPart:IsA("BasePart") then break end
-        end
-    end
-    
-    if not targetPart then
-        for _, child in ipairs(vehicle:GetDescendants()) do
-            if child:IsA("BasePart") then
-                targetPart = child
-                break
+local function onVehicleAdded(vehicle)
+    task.spawn(function()
+        task.wait(0.1)
+        if not vehicle or not vehicle.Parent then return end
+        
+        local vehiclePartOption = SilentAimSettings.VehicleTargetPart or "TargetPart"
+        local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
+        
+        if not TargetPart then
+            for _, pName in ipairs({"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase"}) do
+                TargetPart = vehicle:FindFirstChild(pName, true)
+                if TargetPart then break end
             end
         end
-    end
-    return targetPart
-end
-
-local function onVehicleAdded(vehicle)
-    local part = findBestPart(vehicle)
-    if part then
-        VehicleCache[vehicle] = part
-    else
-        VehicleCache[vehicle] = vehicle
-    end
+        
+        if not TargetPart then
+            TargetPart = vehicle:FindFirstChild("Body", true) or vehicle:FindFirstChild("Engine", true) or vehicle:FindFirstChild("Chassis", true) or vehicle:FindFirstChild("Hull", true)
+        end
+        
+        if not TargetPart then
+            for _, child in ipairs(vehicle:GetDescendants()) do
+                if child:IsA("BasePart") then
+                    TargetPart = child
+                    break
+                end
+            end
+        end
+        
+        if TargetPart and TargetPart:IsA("BasePart") then
+            VehicleCache[vehicle] = TargetPart
+        end
+    end)
 end
 
 local function onVehicleRemoved(vehicle)
@@ -585,15 +588,9 @@ local function getClosestPlayer(config)
             end
         end
 
-        for vehicle, cachedPart in pairs(VehicleCache) do
+        for vehicle, TargetPart in pairs(VehicleCache) do
             if not vehicle or not vehicle.Parent or IgnoredVehicleInstances[vehicle] then continue end
 
-            local TargetPart = cachedPart
-            if not TargetPart or not TargetPart.Parent or not TargetPart:IsA("BasePart") then
-                TargetPart = findBestPart(vehicle)
-                VehicleCache[vehicle] = TargetPart or vehicle
-            end
-            
             if TargetPart and TargetPart:IsA("BasePart") then
                 local targetDir = (TargetPart.Position - camPos).Unit
                 if lookVector:Dot(targetDir) > 0 then 
@@ -1455,9 +1452,8 @@ end)
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
-    local Method = getnamecallmethod()
-    local Arguments = {...}
-    local self = Arguments[1]
+    local Method, Arguments = getnamecallmethod(), {...}
+    local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
 
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
     if Method == "Destroy" and self == Client then
@@ -1503,8 +1499,13 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
         end
     end
 
-    if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and CalculateChance(SilentAimSettings.HitChance) and allowedFireCall then
+    if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
         local HitPart = ScriptState.ClosestHitPart or getClosestPlayer()
+        
+        if not HitPart then
+            return oldNamecall(...)
+        end
+
         if HitPart then
             local ignoredList = getIgnoredList()
             local originOptions = SilentAimSettings.Origin
