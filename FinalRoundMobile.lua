@@ -375,7 +375,37 @@ SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 local VehicleCache = {}
 
 local function onVehicleAdded(vehicle)
-    VehicleCache[vehicle] = true
+    task.spawn(function()
+        task.wait(0.1)
+        if not vehicle or not vehicle.Parent then return end
+        
+        local vehiclePartOption = SilentAimSettings.VehicleTargetPart or "TargetPart"
+        local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
+        
+        if not TargetPart then
+            for _, pName in ipairs({"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase"}) do
+                TargetPart = vehicle:FindFirstChild(pName, true)
+                if TargetPart then break end
+            end
+        end
+        
+        if not TargetPart then
+            TargetPart = vehicle:FindFirstChild("Body", true) or vehicle:FindFirstChild("Engine", true) or vehicle:FindFirstChild("Chassis", true) or vehicle:FindFirstChild("Hull", true)
+        end
+        
+        if not TargetPart then
+            for _, child in ipairs(vehicle:GetDescendants()) do
+                if child:IsA("BasePart") then
+                    TargetPart = child
+                    break
+                end
+            end
+        end
+        
+        if TargetPart and TargetPart:IsA("BasePart") then
+            VehicleCache[vehicle] = TargetPart
+        end
+    end)
 end
 
 local function onVehicleRemoved(vehicle)
@@ -532,37 +562,37 @@ local function getClosestPlayer(config)
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
         local camPos = Camera.CFrame.Position
         local lookVector = Camera.CFrame.LookVector
-
-        for vehicle in pairs(VehicleCache) do
-            if not vehicle or not vehicle.Parent then continue end
-
-            local body = FindFirstChild(vehicle, "Body") or FindFirstChild(vehicle, "Functionality")
-            local TargetPart = body and FindFirstChild(body, vehiclePartOption)
-
-            if not TargetPart then
-                local partsFolder = FindFirstChild(vehicle, "Parts")
-                if partsFolder then
-                    TargetPart = FindFirstChild(partsFolder, vehiclePartOption)
+        
+        local IgnoredVehicleInstances = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p == LocalPlayer or (ignoredPlayers and ignoredPlayers[p.Name]) then
+                local char = p.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum and hum.SeatPart then
+                    for vehicle in pairs(VehicleCache) do
+                        if hum.SeatPart:IsDescendantOf(vehicle) then
+                            IgnoredVehicleInstances[vehicle] = true
+                            break
+                        end
+                    end
                 end
             end
-            
-            if not TargetPart then
-                TargetPart = FindFirstChild(vehicle, vehiclePartOption)
-            end
-            
-            if TargetPart then
+        end
+
+        for vehicle, TargetPart in pairs(VehicleCache) do
+            if not vehicle or not vehicle.Parent or IgnoredVehicleInstances[vehicle] then continue end
+
+            if TargetPart and TargetPart:IsA("BasePart") then
                 local targetDir = (TargetPart.Position - camPos).Unit
-                if lookVector:Dot(targetDir) < 0 then 
-                    continue 
-                end
-
-                local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
-                if OnScreen then
-                    local Dist = (originPosition - Pos).Magnitude
-                    if Dist <= (DistanceToMouse or radiusOption) then
-                        ClosestPart = TargetPart
-                        ClosestPlayer = vehicle
-                        DistanceToMouse = Dist
+                if lookVector:Dot(targetDir) > 0 then 
+                    local Pos, OnScreen = getPositionOnScreen(TargetPart.Position)
+                    if OnScreen then
+                        local Dist = (originPosition - Pos).Magnitude
+                        if Dist <= (DistanceToMouse or radiusOption) then
+                            ClosestPart = TargetPart
+                            ClosestPlayer = vehicle
+                            DistanceToMouse = Dist
+                        end
                     end
                 end
             end
@@ -1221,7 +1251,7 @@ Main:AddDropdown("TargetPart", {
     AllowNull = true,
     Text = "Target Part",
     Default = SilentAimSettings.TargetPart,
-    Values = {"Head", "HumanoidRootPart", "None"}
+    Values = {"Head", "HumanoidRootPart", "None", "Random"}
 }):OnChanged(function()
     SilentAimSettings.TargetPart = Options.TargetPart.Value
 end)
@@ -1621,6 +1651,11 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
 
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
         local HitPart = ScriptState.ClosestHitPart or getClosestPlayer()
+        
+        if not HitPart then
+            return oldNamecall(...)
+        end
+
         if HitPart then
             local ignoredList = getIgnoredList()
             local originOptions = SilentAimSettings.Origin
@@ -3028,5 +3063,3 @@ task.spawn(function()
         end
     end
 end)
-
-ThemeManager:LoadDefaultTheme()
