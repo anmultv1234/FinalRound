@@ -385,6 +385,7 @@ SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 local VehicleCache = {}
 
 local function onVehicleAdded(vehicle)
+    getgenv().testvehicle = vehicle
     task.spawn(function()
         task.wait(0.1)
         if not vehicle or not vehicle.Parent then return end
@@ -393,7 +394,7 @@ local function onVehicleAdded(vehicle)
         local TargetPart = vehicle:FindFirstChild(vehiclePartOption, true)
         
         if not TargetPart then
-            for _, pName in ipairs({"TargetPart", "PropellerBase", "PrimaryPart", "RudderPivotBase"}) do
+            for _, pName in ipairs({"TargetPart", "BoatPivot", "PropellerBase", "PrimaryPart", "RudderPivotBase"}) do
                 TargetPart = vehicle:FindFirstChild(pName, true)
                 if TargetPart then break end
             end
@@ -1043,6 +1044,7 @@ Main:AddDropdown("VehicleTargetPart", {
     Default = "TargetPart",
     Values = {
         "TargetPart", 
+        "BoatPivot",
         "PropellerBase", 
         "PrimaryPart",
         "RudderPivotBase"
