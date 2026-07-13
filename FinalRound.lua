@@ -601,31 +601,30 @@ local function getClosestPlayer(config)
             if not vehicle or not vehicle.Parent then continue end
 
             local isMyVehicle = false
-            local ownerName = nil
+            local vName = vehicle.Name
             
-            local ownerAttr = vehicle:GetAttribute("Owner") or vehicle:GetAttribute("Creator") or vehicle:GetAttribute("PlayerName")
-            if ownerAttr then
-                ownerName = tostring(ownerAttr)
-            else
-                local ownerVal = vehicle:FindFirstChild("Owner") or vehicle:FindFirstChild("Creator") or vehicle:FindFirstChild("PlayerName")
-                if ownerVal and ownerVal:IsA("StringValue") then
-                    ownerName = ownerVal.Value
-                end
-            end
-
-            if ownerName == LocalPlayer.Name then
+            if vName == LocalPlayer.Name or string.find(vName, LocalPlayer.Name) then
                 isMyVehicle = true
             end
 
-            if isMyVehicle or (ownerName and ignoredPlayers and ignoredPlayers[ownerName]) then 
-                continue 
+            if not isMyVehicle and ignoredPlayers then
+                for ignoredName, _ in pairs(ignoredPlayers) do
+                    if vName == ignoredName or string.find(vName, ignoredName) then
+                        isMyVehicle = true
+                        break
+                    end
+                end
             end
 
             if TargetPart and myRoot then
                 local distanceToVehicle = (TargetPart.Position - myRoot.Position).Magnitude
                 if distanceToVehicle < 25 then
-                    continue
+                    isMyVehicle = true
                 end
+            end
+
+            if isMyVehicle then 
+                continue 
             end
 
             if TargetPart and TargetPart:IsA("BasePart") then
@@ -1283,31 +1282,37 @@ task.spawn(function()
                 teamCheck = teamCheckActive,
                 aliveCheck = aliveCheckActive
             })
+            
             if closestPart and closestPlayer then
-                local char = closestPlayer.Character or closestPart.Parent
-                if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
-                    if teamCheckActive and playersOnSameTeam(closestPlayer) then
-                        removeOldHighlight()
-                        return
+                local isVehicle = (typeof(closestPlayer) == "Instance" and not closestPlayer:IsA("Player"))
+                local targetModel = isVehicle and closestPlayer or closestPlayer.Character
+                
+                if targetModel then
+                    if not isVehicle then
+                        if teamCheckActive and playersOnSameTeam(closestPlayer) then
+                            removeOldHighlight()
+                            return
+                        end
+                        if visibleCheckActive and not IsPlayerVisible(closestPlayer) then
+                            removeOldHighlight()
+                            return
+                        end
+                        if SilentAimSettings.VisibleCheck and not IsPlayerVisible(closestPlayer) then
+                            removeOldHighlight()
+                            return
+                        end
                     end
-                    if visibleCheckActive and not IsPlayerVisible(closestPlayer) then
-                        removeOldHighlight()
-                        return
-                    end
-                    if SilentAimSettings.VisibleCheck and not IsPlayerVisible(closestPlayer) then
-                        removeOldHighlight()
-                        return
-                    end
-                    local Root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
+                    
+                    local Root = targetModel.PrimaryPart or targetModel:FindFirstChild("HumanoidRootPart") or closestPart
                     if Root then
                         local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
                         removeOldHighlight()
                         if IsOnScreen then
-                            local highlight = char:FindFirstChildOfClass("Highlight")
+                            local highlight = targetModel:FindFirstChildOfClass("Highlight")
                             if not highlight then
                                 highlight = Instance.new("Highlight")
-                                highlight.Parent = char
-                                highlight.Adornee = char
+                                highlight.Parent = targetModel
+                                highlight.Adornee = targetModel
                             end
                             highlight.FillColor = Options.MouseVisualizeColor.Value
                             highlight.FillTransparency = 0.5
@@ -1316,6 +1321,8 @@ task.spawn(function()
                             ScriptState.previousHighlight = highlight
                         end
                     end
+                else
+                    removeOldHighlight()
                 end
             else
                 removeOldHighlight()
