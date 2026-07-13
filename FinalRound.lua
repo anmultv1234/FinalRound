@@ -383,6 +383,7 @@ SilentAimSettings.Include = normalizeSelection(SilentAimSettings.Include)
 SilentAimSettings.Origin = normalizeSelection(SilentAimSettings.Origin)
 
 local VehicleCache = {}
+local VehicleDrawings = {}
 
 local function onVehicleAdded(vehicle)
     getgenv().testvehicle = vehicle
@@ -415,12 +416,33 @@ local function onVehicleAdded(vehicle)
         
         if TargetPart and TargetPart:IsA("BasePart") then
             VehicleCache[vehicle] = TargetPart
+            
+            if typeof(Drawing) == "table" and typeof(Drawing.new) == "function" then
+                if not VehicleDrawings[vehicle] then
+                    local d = Drawing.new("Text")
+                    d.Center = true
+                    d.Outline = true
+                    d.Color = Color3.new(1, 1, 1)
+                    d.Size = 13
+                    if Drawing.Fonts and Drawing.Fonts.Monospace then
+                        d.Font = Drawing.Fonts.Monospace
+                    else
+                        d.Font = 3
+                    end
+                    d.Visible = false
+                    VehicleDrawings[vehicle] = d
+                end
+            end
         end
     end)
 end
 
 local function onVehicleRemoved(vehicle)
     VehicleCache[vehicle] = nil
+    if VehicleDrawings[vehicle] then
+        VehicleDrawings[vehicle]:Destroy()
+        VehicleDrawings[vehicle] = nil
+    end
 end
 
 local function setupFolder(folder)
@@ -572,25 +594,39 @@ local function getClosestPlayer(config)
     if SilentAimSettings.TargetVehicles or (ScriptState and ScriptState.targetVehicles) then
         local camPos = Camera.CFrame.Position
         local lookVector = Camera.CFrame.LookVector
+        local myChar = LocalPlayer.Character
+        local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar.PrimaryPart)
         
-        local IgnoredVehicleInstances = {}
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p == LocalPlayer or (ignoredPlayers and ignoredPlayers[p.Name]) then
-                local char = p.Character
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum and hum.SeatPart then
-                    for vehicle in pairs(VehicleCache) do
-                        if hum.SeatPart:IsDescendantOf(vehicle) then
-                            IgnoredVehicleInstances[vehicle] = true
-                            break
-                        end
-                    end
+        for vehicle, TargetPart in pairs(VehicleCache) do
+            if not vehicle or not vehicle.Parent then continue end
+
+            local isMyVehicle = false
+            local ownerName = nil
+            
+            local ownerAttr = vehicle:GetAttribute("Owner") or vehicle:GetAttribute("Creator") or vehicle:GetAttribute("PlayerName")
+            if ownerAttr then
+                ownerName = tostring(ownerAttr)
+            else
+                local ownerVal = vehicle:FindFirstChild("Owner") or vehicle:FindFirstChild("Creator") or vehicle:FindFirstChild("PlayerName")
+                if ownerVal and ownerVal:IsA("StringValue") then
+                    ownerName = ownerVal.Value
                 end
             end
-        end
 
-        for vehicle, TargetPart in pairs(VehicleCache) do
-            if not vehicle or not vehicle.Parent or IgnoredVehicleInstances[vehicle] then continue end
+            if ownerName == LocalPlayer.Name then
+                isMyVehicle = true
+            end
+
+            if isMyVehicle or (ownerName and ignoredPlayers and ignoredPlayers[ownerName]) then 
+                continue 
+            end
+
+            if TargetPart and myRoot then
+                local distanceToVehicle = (TargetPart.Position - myRoot.Position).Magnitude
+                if distanceToVehicle < 25 then
+                    continue
+                end
+            end
 
             if TargetPart and TargetPart:IsA("BasePart") then
                 local targetDir = (TargetPart.Position - camPos).Unit
@@ -1228,8 +1264,6 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     })
 end
 
-local VehicleDrawings = {}
-
 local function removeOldHighlight()
     if ScriptState.previousHighlight then
         ScriptState.previousHighlight:Destroy()
@@ -1313,43 +1347,25 @@ task.spawn(function()
             end
         end
         
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local hasDrawing = typeof(Drawing) == "table" and typeof(Drawing.new) == "function"
-                if hasDrawing then
-                    if not VehicleDrawings[player] then
-                        local d = Drawing.new("Text")
-                        d.Center = true
-                        d.Outline = true
-                        d.Color = Color3.new(1, 1, 1)
-                        d.Size = 16
-                        d.Visible = false
-                        VehicleDrawings[player] = d
-                    end
-                    
-                    local d = VehicleDrawings[player]
-                    local ESP_Global = getgenv().ExunysDeveloperESP
-                    local espProps = ESP_Global and ESP_Global.Properties and ESP_Global.Properties.ESP
-                    local showVehicle = espProps and espProps.DisplayVehicle
-                    local espOn = ESP_Global and ESP_Global.Settings and ESP_Global.Settings.Enabled
+        local ESP_Global = getgenv().ExunysDeveloperESP
+        local espProps = ESP_Global and ESP_Global.Properties and ESP_Global.Properties.ESP
+        local showVehicle = espProps and espProps.DisplayVehicle
+        local espOn = ESP_Global and ESP_Global.Settings and ESP_Global.Settings.Enabled
 
-                    if showVehicle and espOn and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        local vName = GetPlayerVehicle(player)
-                        if vName then
-                            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position - Vector3.new(0, 4, 0))
-                            if onScreen then
-                                d.Text = "[" .. vName .. "]"
-                                d.Position = Vector2.new(pos.X, pos.Y)
-                                d.Visible = true
-                            else
-                                d.Visible = false
-                            end
-                        else
-                            d.Visible = false
-                        end
+        for vehicle, targetPart in pairs(VehicleCache) do
+            local d = VehicleDrawings[vehicle]
+            if d then
+                if showVehicle and espOn and vehicle and vehicle.Parent and targetPart and targetPart:IsA("BasePart") then
+                    local pos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                    if onScreen then
+                        d.Text = "[" .. vehicle.Name .. "]"
+                        d.Position = Vector2.new(pos.X, pos.Y)
+                        d.Visible = true
                     else
-                        if d then d.Visible = false end
+                        d.Visible = false
                     end
+                else
+                    d.Visible = false
                 end
             end
         end
