@@ -1357,16 +1357,21 @@ task.spawn(function()
         local ESP_Global = getgenv().ExunysDeveloperESP
         local espProps = ESP_Global and ESP_Global.Properties and ESP_Global.Properties.ESP
         local showVehicle = espProps and espProps.DisplayVehicle
-        local espOn = ESP_Global and ESP_Global.Settings and ESP_Global.Settings.Enabled
 
         for vehicle, targetPart in pairs(VehicleCache) do
             local d = VehicleDrawings[vehicle]
             if d then
-                if showVehicle and espOn and vehicle and vehicle.Parent and targetPart and targetPart:IsA("BasePart") then
+                if showVehicle and vehicle and vehicle.Parent and targetPart and targetPart:IsA("BasePart") then
                     local pos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
                     if onScreen then
                         d.Text = "[" .. vehicle.Name .. "]"
                         d.Position = Vector2.new(pos.X, pos.Y)
+                        if espProps then
+                            d.Size = espProps.Size or 13
+                            d.Font = espProps.Font or ((Drawing.Fonts and Drawing.Fonts.Monospace) or 3)
+                            if espProps.Color then d.Color = espProps.Color end
+                            if espProps.Outline ~= nil then d.Outline = espProps.Outline end
+                        end
                         d.Visible = true
                     else
                         d.Visible = false
@@ -1906,7 +1911,12 @@ if not ESP then
     ESP = {
         Settings = {},
         Properties = {
-            ESP = { DisplayVehicle = true },
+            ESP = { 
+                DisplayVehicle = true,
+                Size = 13,
+                Font = (Drawing and Drawing.Fonts and Drawing.Fonts.Monospace) or 3,
+                Outline = true
+            },
             Tracer = {},
             HeadDot = {},
             Box = {},
@@ -2124,10 +2134,10 @@ addDefinitionControls(ESPVisualGroup, {
     {Type = "slider", Name = "Offset", Path = {"Properties", "ESP", "Offset"}, Min = 0, Max = 50, Rounding = 0},
     {Type = "color", Name = "Color", Path = {"Properties", "ESP", "Color"}},
     {Type = "slider", Name = "Transparency", Path = {"Properties", "ESP", "Transparency"}, Min = 0, Max = 1, Rounding = 2},
-    {Type = "slider", Name = "Size", Path = {"Properties", "ESP", "Size"}, Min = 10, Max = 30, Rounding = 0},
-    {Type = "dropdown", Name = "Font", Path = {"Properties", "ESP", "Font"}, Values = fontValues, Map = fontMap, OnChange = refreshESPConfiguration},
+    {Type = "slider", Name = "Size", Path = {"Properties", "ESP", "Size"}, Min = 10, Max = 30, Rounding = 0, Default = 13},
+    {Type = "dropdown", Name = "Font", Path = {"Properties", "ESP", "Font"}, Values = fontValues, Map = fontMap, Default = "Monospace", OnChange = refreshESPConfiguration},
     {Type = "color", Name = "Outline Color", Path = {"Properties", "ESP", "OutlineColor"}},
-    {Type = "toggle", Name = "Outline", Path = {"Properties", "ESP", "Outline"}},
+    {Type = "toggle", Name = "Outline", Path = {"Properties", "ESP", "Outline"}, Default = true},
     {Type = "toggle", Name = "Display Distance", Path = {"Properties", "ESP", "DisplayDistance"}},
     {Type = "toggle", Name = "Display Health", Path = {"Properties", "ESP", "DisplayHealth"}},
     {Type = "toggle", Name = "Display Name", Path = {"Properties", "ESP", "DisplayName"}},
