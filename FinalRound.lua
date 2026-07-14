@@ -3071,18 +3071,6 @@ folders.ACS_Guns = waitforchild(folders.Configurations, "ACS_Guns")
 local events = {}
 events.BulletHit = waitforchild(folders.BulletFireSystem, "BulletHit")
 events.FireGun = waitforchild(folders.BulletFireSystem, "FireGun")
-local utils = {}
-function utils.desyncTo(localRootPart, targetPart)
-    if getgenv().desyncing then
-        getgenv().desyncing:Disconnect()
-        getgenv().desyncing = nil
-    end
-    getgenv().desyncing = runservice.Heartbeat:Connect(function()
-        if not localRootPart or not targetPart then return end
-        localRootPart.CFrame = targetPart.CFrame - Vector3.new(0, 10, 0)
-        sethiddenproperty(localRootPart, "PhysicsRepRootPart", targetPart)
-    end)
-end
 
 if getgenv().killbot then
     getgenv().killbot:Disconnect()
@@ -3130,7 +3118,6 @@ getgenv().killbot = heartbeat:Connect(function()
     end
     if #targets > 0 then
         for _, target in ipairs(targets) do
-            utils.desyncTo(me.rootpart, target.rootpart)
             local hitpos = target.head.Position
             events.FireGun:FireServer({ hitpos }, gun, localchar:FindFirstChild("S"..gun.Name), hitpos, false)
             events.BulletHit:FireServer(
