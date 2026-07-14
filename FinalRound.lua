@@ -770,6 +770,7 @@ local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
 local VehicleModBox = ExploitTab:AddRightGroupbox("Vehicle Modifier")
 local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
+local RageTab = Window:AddTab("Rage")
 
 local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
@@ -1575,46 +1576,30 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 return adjustedOrigin, direction
             end
 
-            if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
-                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
-                    local Origin, Direction = computeRay(Arguments[2].Origin)
-                    Arguments[2] = Ray.new(Origin, Direction)
-                    return oldNamecall(unpack(Arguments))
-                end
-            elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
-                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
-                    local Origin, Direction = computeRay(Arguments[2].Origin)
-                    Arguments[2] = Ray.new(Origin, Direction)
-                    return oldNamecall(unpack(Arguments))
-                end
-            elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
-                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
-                    local Origin, Direction = computeRay(Arguments[2].Origin)
-                    Arguments[2] = Ray.new(Origin, Direction)
-                    return oldNamecall(unpack(Arguments))
-                end
-            elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
-                if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
-                    local Origin, Direction = computeRay(Arguments[2])
-                    Arguments[2], Arguments[3] = Origin, Direction
-                    return oldNamecall(unpack(Arguments))
-                end
-            elseif Method == "ViewportPointToRay" and SilentAimSettings.SilentAimMethod == Method then
-                if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
-                    local Origin = Camera.CFrame.p
+            if SilentAimSettings.SilentAimMethod == Method then
+                if Method == "Raycast" and ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                    local Origin = Arguments[2]
                     local NewOrigin, Direction = computeRay(Origin)
-                    return Ray.new(NewOrigin, Direction)
+                    Arguments[2] = NewOrigin
+                    Arguments[3] = Direction
+                    return oldNamecall(unpack(Arguments))
+                elseif Method == "ViewportPointToRay" and SilentAimSettings.SilentAimMethod == Method then
+                    if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
+                        local Origin = Camera.CFrame.p
+                        local NewOrigin, Direction = computeRay(Origin)
+                        return Ray.new(NewOrigin, Direction)
+                    end
+                elseif Method == "ScreenPointToRay" and SilentAimSettings.SilentAimMethod == Method then
+                    if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
+                        local Origin = Camera.CFrame.p
+                        local NewOrigin, Direction = computeRay(Origin)
+                        return Ray.new(NewOrigin, Direction)
+                    end
+                elseif Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == "CounterBlox" then
+                    local Origin, Direction = computeRay(Arguments[2].Origin)
+                    Arguments[2] = Ray.new(Origin, Direction)
+                    return oldNamecall(unpack(Arguments))
                 end
-            elseif Method == "ScreenPointToRay" and SilentAimSettings.SilentAimMethod == Method then
-                if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
-                    local Origin = Camera.CFrame.p
-                    local NewOrigin, Direction = computeRay(Origin)
-                    return Ray.new(NewOrigin, Direction)
-                end
-            elseif Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == "CounterBlox" then
-                local Origin, Direction = computeRay(Arguments[2].Origin)
-                Arguments[2] = Ray.new(Origin, Direction)
-                return oldNamecall(unpack(Arguments))
             end
         end
     end
@@ -3062,3 +3047,115 @@ task.spawn(function()
         end
     end
 end)
+
+local RageBox = RageTab:AddLeftGroupbox("Rage")
+
+getgenv().config = {
+    rageEnabled = false,
+    killRange = 8000
+}
+
+local getservice, findfirstchild, findfirstchildofclass, waitforchild = game.GetService, game.FindFirstChild, game.FindFirstChildOfClass, game.WaitForChild
+local players, replicatedstorage, runservice = getservice(game, "Players"), getservice(game, "ReplicatedStorage"), getservice(game, "RunService")
+local localplayer = players.LocalPlayer
+local heartbeat = runservice.Heartbeat
+
+do
+    local FDMG = replicatedstorage:WaitForChild("ACS_Engine"):WaitForChild("Events"):FindFirstChild("FDMG")
+    if FDMG then FDMG:Destroy() end
+end
+local folders = {}
+folders.BulletFireSystem = waitforchild(replicatedstorage, "BulletFireSystem")
+folders.Configurations = waitforchild(replicatedstorage, "Configurations")
+folders.ACS_Guns = waitforchild(folders.Configurations, "ACS_Guns")
+local events = {}
+events.BulletHit = waitforchild(folders.BulletFireSystem, "BulletHit")
+events.FireGun = waitforchild(folders.BulletFireSystem, "FireGun")
+local utils = {}
+function utils.desyncTo(localRootPart, targetPart)
+    if getgenv().desyncing then
+        getgenv().desyncing:Disconnect()
+        getgenv().desyncing = nil
+    end
+    getgenv().desyncing = runservice.Heartbeat:Connect(function()
+        if not localRootPart or not targetPart then return end
+        localRootPart.CFrame = targetPart.CFrame - Vector3.new(0, 10, 0)
+        sethiddenproperty(localRootPart, "PhysicsRepRootPart", targetPart)
+    end)
+end
+
+if getgenv().killbot then
+    getgenv().killbot:Disconnect()
+    getgenv().killbot = nil
+end
+getgenv().killbot = heartbeat:Connect(function()
+    if not getgenv().config.rageEnabled then return end
+    local localchar = localplayer.Character
+    if not localchar then return end
+    local localbackpack = localplayer:FindFirstChildOfClass("Backpack")
+    local tool = localbackpack and localbackpack:FindFirstChildOfClass("Tool")
+    if tool then tool.Parent = localchar end
+    local gun = localchar:FindFirstChildOfClass("Tool")
+    if not gun then return end
+    local gunfolder = folders.ACS_Guns:FindFirstChild(gun.Name)
+    if not gunfolder then return end
+    local settingsScript = gunfolder:FindFirstChild("Settings")
+    if not settingsScript then return end
+    local settings = require(settingsScript)
+    local me = {}
+    me.humanoid = localchar:FindFirstChildOfClass("Humanoid")
+    me.rootpart = me.humanoid and me.humanoid.RootPart
+    if not me.rootpart then return end
+    local targets = {}
+    local ignoredPlayers = (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value) or {}
+    for _, player in ipairs(players:GetPlayers()) do
+        if player == localplayer then continue end
+        if ignoredPlayers[player.Name] then continue end
+        local char = player.Character
+        if not char then continue end
+        if char:FindFirstChildOfClass("ForceField") then continue end
+        local head = char:FindFirstChild("Head")
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        local rootpart = humanoid and humanoid.RootPart
+        if head and rootpart then
+            local distance = (me.rootpart.Position - rootpart.Position).Magnitude
+            if distance <= getgenv().config.killRange then
+                table.insert(targets, {
+                    head = head,
+                    rootpart = rootpart,
+                    player = player
+                })
+            end
+        end
+    end
+    if #targets > 0 then
+        for _, target in ipairs(targets) do
+            utils.desyncTo(me.rootpart, target.rootpart)
+            local hitpos = target.head.Position
+            events.FireGun:FireServer({ hitpos }, gun, localchar:FindFirstChild("S"..gun.Name), hitpos, false)
+            events.BulletHit:FireServer(
+                gun,
+                target.head,
+                hitpos,
+                {{ hitpos, hitpos, math.huge }, { hitpos, hitpos, math.huge }},
+                hitpos,
+                {
+                    FireRate = settings.FireRate,
+                    MaxSpread = settings.MaxSpread,
+                    Mode = settings.Mode,
+                    MaxRecoilPower = settings.MaxRecoilPower,
+                    Distance = settings.Distance,
+                    BSpeed = settings.BSpeed
+                }
+            )
+        end
+    end
+end)
+
+RageBox:AddToggle("rageEnabled", {
+    Text = "Enabled",
+    Default = false,
+    Callback = function(value)
+        getgenv().config.rageEnabled = value
+    end
+})
