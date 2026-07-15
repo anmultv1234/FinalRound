@@ -706,6 +706,7 @@ local GeneralTab = Window:AddTab("Main")
 local aimbox = GeneralTab:AddRightGroupbox("AimLock")
 local velbox = GeneralTab:AddRightGroupbox("Anti Lock")
 local frabox = GeneralTab:AddRightGroupbox("Movement")
+local ragebox = GeneralTab:AddLeftGroupbox("Rage")
 local ExploitTab = Window:AddTab("Exploits")
 local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
 local VisualsTab = Window:AddTab("Visuals")
@@ -1104,6 +1105,80 @@ velbox:AddSlider("ReverseResolveIntensity", {
         ScriptState.reverseResolveIntensity = value
     end
 })
+
+getgenv().config = getgenv().config or {}
+getgenv().config.killRange = getgenv().config.killRange or 100
+ScriptState.rageEnabled = false
+
+ragebox:AddToggle("rageEnabledToggle", {
+    Text = "Rage Mode",
+    Default = false,
+    Callback = function(value)
+        ScriptState.rageEnabled = value
+    end
+})
+
+ragebox:AddSlider("killRangeSlider", {
+    Text = "Kill Range",
+    Default = 100,
+    Min = 10,
+    Max = 1000,
+    Rounding = 0,
+    Callback = function(value)
+        getgenv().config.killRange = value
+    end
+})
+
+local utils = {}
+function utils.desyncTo(meRoot, targetRoot)
+    if meRoot and targetRoot then
+        local originalVelocity = meRoot.Velocity
+        local direction = (targetRoot.Position - meRoot.Position).Unit
+        meRoot.Velocity = direction * ((ScriptState.reverseResolveIntensity or 5) * 1000)
+        RunService.RenderStepped:Wait()
+        meRoot.Velocity = originalVelocity
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if ScriptState.rageEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local me = { rootpart = LocalPlayer.Character.HumanoidRootPart }
+        local targets = {}
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                local head = player.Character:FindFirstChild("Head")
+                local rootpart = humanoid and humanoid.RootPart
+                
+                if head and rootpart and humanoid.Health > 0 then
+                    local distance = (me.rootpart.Position - rootpart.Position).Magnitude
+                    if distance <= (getgenv().config.killRange or 100) then
+                        table.insert(targets, {
+                            head = head,
+                            rootpart = rootpart,
+                            player = player
+                        })
+                    end
+                end
+            end
+        end
+        
+        if #targets > 0 then
+            for _, target in ipairs(targets) do
+                utils.desyncTo(me.rootpart, target.rootpart)
+                ScriptState.ClosestHitPart = target.head
+                
+                if getgenv().WeaponOnHands then
+                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        tool:Activate()
+                    end
+                end
+            end
+        end
+    end
+end)
 
 RunService.RenderStepped:Connect(function()
     if ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
