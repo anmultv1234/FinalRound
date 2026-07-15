@@ -3076,67 +3076,81 @@ if getgenv().killbot then
     getgenv().killbot:Disconnect()
     getgenv().killbot = nil
 end
+
+getgenv().isRageFiring = false
 getgenv().killbot = heartbeat:Connect(function()
     if not getgenv().config.rageEnabled then return end
-    local localchar = localplayer.Character
-    if not localchar then return end
-    local localbackpack = localplayer:FindFirstChildOfClass("Backpack")
-    local tool = localbackpack and localbackpack:FindFirstChildOfClass("Tool")
-    if tool then tool.Parent = localchar end
-    local gun = localchar:FindFirstChildOfClass("Tool")
-    if not gun then return end
-    local gunfolder = folders.ACS_Guns:FindFirstChild(gun.Name)
-    if not gunfolder then return end
-    local settingsScript = gunfolder:FindFirstChild("Settings")
-    if not settingsScript then return end
-    local settings = require(settingsScript)
-    local me = {}
-    me.humanoid = localchar:FindFirstChildOfClass("Humanoid")
-    me.rootpart = me.humanoid and me.humanoid.RootPart
-    if not me.rootpart then return end
-    local targets = {}
-    local ignoredPlayers = (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value) or {}
-    for _, player in ipairs(players:GetPlayers()) do
-        if player == localplayer then continue end
-        if ignoredPlayers[player.Name] then continue end
-        local char = player.Character
-        if not char then continue end
-        if char:FindFirstChildOfClass("ForceField") then continue end
-        local head = char:FindFirstChild("Head")
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        local rootpart = humanoid and humanoid.RootPart
-        if head and rootpart then
-            local distance = (me.rootpart.Position - rootpart.Position).Magnitude
-            if distance <= getgenv().config.killRange then
-                table.insert(targets, {
-                    head = head,
-                    rootpart = rootpart,
-                    player = player
-                })
+    if getgenv().isRageFiring then return end
+    getgenv().isRageFiring = true
+
+    task.spawn(function()
+        pcall(function()
+            local localchar = localplayer.Character
+            if not localchar then return end
+            local localbackpack = localplayer:FindFirstChildOfClass("Backpack")
+            local tool = localbackpack and localbackpack:FindFirstChildOfClass("Tool")
+            if tool then tool.Parent = localchar end
+            local gun = localchar:FindFirstChildOfClass("Tool")
+            if not gun then return end
+            local gunfolder = folders.ACS_Guns:FindFirstChild(gun.Name)
+            if not gunfolder then return end
+            local settingsScript = gunfolder:FindFirstChild("Settings")
+            if not settingsScript then return end
+            local settings = require(settingsScript)
+            local me = {}
+            me.humanoid = localchar:FindFirstChildOfClass("Humanoid")
+            me.rootpart = me.humanoid and me.humanoid.RootPart
+            if not me.rootpart then return end
+            local targets = {}
+            local ignoredPlayers = (Options and Options.PlayerDropdown and Options.PlayerDropdown.Value) or {}
+            for _, player in ipairs(players:GetPlayers()) do
+                if player == localplayer then continue end
+                if ignoredPlayers[player.Name] then continue end
+                local char = player.Character
+                if not char then continue end
+                if char:FindFirstChildOfClass("ForceField") then continue end
+                local head = char:FindFirstChild("Head")
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                local rootpart = humanoid and humanoid.RootPart
+                if head and rootpart and humanoid.Health > 0 then
+                    local distance = (me.rootpart.Position - rootpart.Position).Magnitude
+                    if distance <= getgenv().config.killRange then
+                        table.insert(targets, {
+                            head = head,
+                            distance = distance
+                        })
+                    end
+                end
             end
-        end
-    end
-    if #targets > 0 then
-        for _, target in ipairs(targets) do
-            local hitpos = target.head.Position
-            events.FireGun:FireServer({ hitpos }, gun, localchar:FindFirstChild("S"..gun.Name), hitpos, false)
-            events.BulletHit:FireServer(
-                gun,
-                target.head,
-                hitpos,
-                {{ hitpos, hitpos, math.huge }, { hitpos, hitpos, math.huge }},
-                hitpos,
-                {
-                    FireRate = settings.FireRate,
-                    MaxSpread = settings.MaxSpread,
-                    Mode = settings.Mode,
-                    MaxRecoilPower = settings.MaxRecoilPower,
-                    Distance = settings.Distance,
-                    BSpeed = settings.BSpeed
-                }
-            )
-        end
-    end
+            if #targets > 0 then
+                table.sort(targets, function(a, b) return a.distance < b.distance end)
+                for _, target in ipairs(targets) do
+                    if not getgenv().config.rageEnabled then break end
+                    if target.head and target.head.Parent then
+                        local hitpos = target.head.Position
+                        events.FireGun:FireServer({ hitpos }, gun, localchar:FindFirstChild("S"..gun.Name), hitpos, false)
+                        events.BulletHit:FireServer(
+                            gun,
+                            target.head,
+                            hitpos,
+                            {{ hitpos, hitpos, math.huge }, { hitpos, hitpos, math.huge }},
+                            hitpos,
+                            {
+                                FireRate = settings.FireRate,
+                                MaxSpread = settings.MaxSpread,
+                                Mode = settings.Mode,
+                                MaxRecoilPower = settings.MaxRecoilPower,
+                                Distance = settings.Distance,
+                                BSpeed = settings.BSpeed
+                            }
+                        )
+                        task.wait(0.01)
+                    end
+                end
+            end
+        end)
+        getgenv().isRageFiring = false
+    end)
 end)
 
 RageBox:AddToggle("rageEnabled", {
