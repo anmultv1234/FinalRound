@@ -709,6 +709,7 @@ local frabox = GeneralTab:AddRightGroupbox("Movement")
 local ragebox = GeneralTab:AddLeftGroupbox("Rage")
 local ExploitTab = Window:AddTab("Exploits")
 local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
+local VehicleModBox = ExploitTab:AddRightGroupbox("Vehicle Modifier")
 local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
 local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
@@ -844,7 +845,7 @@ AimLockButton.InputChanged:Connect(function(input)
 end)
 
 game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == aimDragInput and aimDragging then
+    if input == dragInput and aimDragging then
         aimUpdate(input)
     end
 end)
@@ -2761,39 +2762,67 @@ local function findSettingsModuleForWeapon(weapon, property)
     return nil
 end
 
+local function applyGunSettings(weapon, property, value)
+    if not (weapon and weapon:IsA("Tool")) then return end
+
+    if property == "Mode" then
+        weapon:SetAttribute("Mode", value)
+
+        local settingsModule = findSettingsModuleForWeapon(weapon, "Mode")
+        if settingsModule then
+            local success, module = pcall(require, settingsModule)
+            if success and type(module) == "table" then
+                module.Mode = value
+                if module.CurrentFireMode then module.CurrentFireMode = value end
+            end
+        end
+
+        for _, scr in ipairs(weapon:GetDescendants()) do
+            if scr:IsA("LocalScript") or scr:IsA("Script") then
+                pcall(function()
+                    local env = getsenv(scr)
+                    if env then
+                        env.Mode = value
+                        env.FireMode = value
+                        if env.CurrentMode then env.CurrentMode = value end
+                        if env.CurrentFireMode then env.CurrentFireMode = value end
+                    end
+                end)
+            end
+        end
+
+        local character = LocalPlayer.Character
+        if character and weapon.Parent == character then
+            local backup = weapon.Parent
+            weapon.Parent = LocalPlayer.Backpack
+            task.wait(0.1)
+            weapon.Parent = backup
+        end
+    else
+        if (getgenv().WeaponModifyMethod or "Attribute") == "Attribute" then
+            pcall(function() weapon:SetAttribute(property, value) end)
+        else
+            local settingsModule = findSettingsModuleForWeapon(weapon, property)
+            if settingsModule then
+                local success, module = pcall(require, settingsModule)
+                if success and type(module) == "table" then
+                    module[property] = value
+                end
+            end
+        end
+    end
+end
+
 local function modifyWeaponSettings(property, value)
     local player = Players.LocalPlayer
     local backpack = player:WaitForChild("Backpack")
     local character = player.Character or player.CharacterAdded:Wait()
 
-    local function applyAttribute(weapon)
-        if weapon and weapon:IsA("Tool") then
-            pcall(function()
-                weapon:SetAttribute(property, value)
-            end)
-        end
-    end
-
-    local function applyRequireModule(weapon)
-        local settingsModule = findSettingsModuleForWeapon(weapon, property)
-        if settingsModule then
-            local success, module = pcall(require, settingsModule)
-            if success and type(module) == "table" and module[property] ~= nil then
-                module[property] = value
-            end
-        end
-    end
-
     local function processWeapon(weapon)
         if not (weapon and weapon:IsA("Tool")) then
             return
         end
-
-        if (getgenv().WeaponModifyMethod or "Attribute") == "Attribute" then
-            applyAttribute(weapon)
-        else
-            applyRequireModule(weapon)
-        end
+        applyGunSettings(weapon, property, value)
     end
 
     local handledEquippedWeapon = false
@@ -2906,6 +2935,118 @@ local inputField = ACSEngineBox:AddInput('FireModeInput', {
 ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
     modifyWeaponSettings("Mode", inputField.Value or 'Auto')
 end)
+
+local VehicleModBox = ExploitTab:AddRightGroupbox("Vehicle Modifier")
+
+getgenv().AutoVehicleMod = false
+getgenv().VehicleModifyMethod = "Attribute"
+getgenv().VehicleFireRate = 8888
+getgenv().VehicleBullets = 50
+getgenv().VehicleSpeed = 10000
+
+VehicleModBox:AddToggle("AutoVehicleModToggle", {
+    Text = "Auto Mod Vehicle Weapons",
+    Default = false,
+    Callback = function(value)
+        getgenv().AutoVehicleMod = value
+    end
+})
+
+VehicleModBox:AddDropdown("VehicleModifyMethodDropdown", {
+    Text = "Modify Method",
+    Default = "Attribute",
+    Values = {"Attribute", "Require"},
+    Callback = function(value)
+        getgenv().VehicleModifyMethod = value
+    end
+})
+
+VehicleModBox:AddInput("VehicleFireRateInput", {
+    Text = "Vehicle Fire Rate",
+    Default = "8888",
+    Numeric = true,
+    Callback = function(value)
+        getgenv().VehicleFireRate = tonumber(value) or 8888
+    end
+})
+
+VehicleModBox:AddInput("VehicleBulletsInput", {
+    Text = "Vehicle Bullets",
+    Default = "50",
+    Numeric = true,
+    Callback = function(value)
+        getgenv().VehicleBullets = tonumber(value) or 50
+    end
+})
+
+VehicleModBox:AddInput("VehicleSpeedInput", {
+    Text = "Vehicle Bullet Speed",
+    Default = "10000",
+    Numeric = true,
+    Callback = function(value)
+        getgenv().VehicleSpeed = tonumber(value) or 10000
+    end
+})
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local function autoApplyGUIWeapon(gui)
+    if not getgenv().AutoVehicleMod then return end
+    task.wait(0.5)
+    local method = getgenv().VehicleModifyMethod or "Attribute"
+    local fireRate = getgenv().VehicleFireRate or 8888
+    local bullets = getgenv().VehicleBullets or 50
+    local speed = getgenv().VehicleSpeed or 10000
+
+    for _, obj in ipairs(gui:GetDescendants()) do
+        if method == "Require" and obj:IsA("ModuleScript") then
+            local success, module = pcall(require, obj)
+            if success and type(module) == "table" and (module.FireRate ~= nil or module.Ammo ~= nil or module.BulletSpread ~= nil or module.CooldownTime ~= nil) then
+                module.Ammo = math.huge
+                module.Bullets = bullets
+                module.FireRate = fireRate
+                module.ShootRate = fireRate
+                module.MinSpread = 0
+                module.MaxSpread = 0
+                module.BulletSpread = 0
+                module.RecoilPunch = 0
+                module.AimRecoilReduction = 0
+                module.CooldownTime = 0
+                module.OverheatCount = 99999
+                module.Distance = 25000
+                module.BSpeed = speed
+                module.MuzzleVelocity = speed
+                module.VRecoil = {0, 0}
+                module.HRecoil = {0, 0}
+            end
+        elseif method == "Attribute" then
+            if obj:GetAttribute("FireRate") ~= nil or obj:GetAttribute("Ammo") ~= nil or obj:GetAttribute("BulletSpread") ~= nil or obj:GetAttribute("CooldownTime") ~= nil then
+                pcall(function()
+                    obj:SetAttribute("Ammo", 99999)
+                    obj:SetAttribute("Bullets", bullets)
+                    obj:SetAttribute("FireRate", fireRate)
+                    obj:SetAttribute("ShootRate", fireRate)
+                    obj:SetAttribute("MinSpread", 0)
+                    obj:SetAttribute("MaxSpread", 0)
+                    obj:SetAttribute("BulletSpread", 0)
+                    obj:SetAttribute("CooldownTime", 0)
+                    obj:SetAttribute("OverheatCount", 99999)
+                    obj:SetAttribute("Distance", 25000)
+                    obj:SetAttribute("BSpeed", speed)
+                    obj:SetAttribute("MuzzleVelocity", speed)
+                    obj:SetAttribute("VRecoil", Vector2.new(0, 0))
+                    obj:SetAttribute("HRecoil", Vector2.new(0, 0))
+                end)
+            end
+        end
+    end
+end
+
+PlayerGui.ChildAdded:Connect(autoApplyGUIWeapon)
+
+for _, gui in ipairs(PlayerGui:GetChildren()) do
+    task.spawn(autoApplyGUIWeapon, gui)
+end
 
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
