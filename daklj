@@ -1,10 +1,3 @@
-local UIS = game:GetService("UserInputService")
-if UIS.TouchEnabled and not UIS.MouseEnabled and not UIS.KeyboardEnabled then
-    getgenv().bypass_adonis = true
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRound/refs/heads/main/FinalRoundMobile.lua"))()
-    return
-end
-
 getgenv().bypass_adonis = true
 
 if not game:IsLoaded() then
@@ -663,14 +656,20 @@ end
 
 local function acquireLockTarget()
     local player = getNearestPlayerToMouse()
-    if player and player.Character then
-        local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
-        local targetPart = player.Character:FindFirstChild(partName)
-
-        if targetPart then
+    if player then
+        local isVehicle = typeof(player) == "Instance" and not player:IsA("Player")
+        if isVehicle then
             ScriptState.isLockedOn = true
             ScriptState.targetPlayer = player
             return true
+        elseif player.Character then
+            local partName = getBodyPart(player.Character, ScriptState.bodyPartSelected)
+            local targetPart = player.Character:FindFirstChild(partName)
+            if targetPart then
+                ScriptState.isLockedOn = true
+                ScriptState.targetPlayer = player
+                return true
+            end
         end
     end
 
@@ -704,44 +703,80 @@ RunService.RenderStepped:Connect(function()
         acquireLockTarget()
     end
 
-    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
-        if ScriptState.aimLockTeamCheck and ScriptState.targetPlayer.Team == LocalPlayer.Team then
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
-            return
-        end
+    if ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer then
+        local target = ScriptState.targetPlayer
+        local isVehicle = typeof(target) == "Instance" and not target:IsA("Player")
 
-        if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(ScriptState.targetPlayer) then
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
-            return
-        end
+        if isVehicle then
+            local part = VehicleCache[target] or target.PrimaryPart or target:FindFirstChild("TargetPart", true)
+            if part and part:IsA("BasePart") then
+                local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
 
-        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
-        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
-
-        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
-
-            if ScriptState.antiLockEnabled then
-                if ScriptState.resolverMethod == "Recalculate" then
-                    predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
-                elseif ScriptState.resolverMethod == "Randomize" then
-                    predictedPosition = predictedPosition + Vector3.new(
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
-                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
-                    )
-                elseif ScriptState.resolverMethod == "Invert" then
-                    predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
+                if ScriptState.antiLockEnabled then
+                    if ScriptState.resolverMethod == "Recalculate" then
+                        predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
+                    elseif ScriptState.resolverMethod == "Randomize" then
+                        predictedPosition = predictedPosition + Vector3.new(
+                            math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                            math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                            math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
+                        )
+                    elseif ScriptState.resolverMethod == "Invert" then
+                        predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
+                    end
                 end
-            end
 
-            local currentCameraPosition = Camera.CFrame.Position
-            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+                local currentCameraPosition = Camera.CFrame.Position
+                Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+            else
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+            end
         else
-            ScriptState.isLockedOn = false
-            ScriptState.targetPlayer = nil
+            if target.Character then
+                if ScriptState.aimLockTeamCheck and target.Team == LocalPlayer.Team then
+                    ScriptState.isLockedOn = false
+                    ScriptState.targetPlayer = nil
+                    return
+                end
+
+                if ScriptState.aimLockVisibleCheck and not IsPlayerVisible(target) then
+                    ScriptState.isLockedOn = false
+                    ScriptState.targetPlayer = nil
+                    return
+                end
+
+                local partName = getBodyPart(target.Character, ScriptState.bodyPartSelected)
+                local part = target.Character:FindFirstChild(partName)
+                local humanoid = target.Character:FindFirstChildOfClass("Humanoid")
+
+                if part and humanoid and humanoid.Health > 0 then
+                    local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
+
+                    if ScriptState.antiLockEnabled then
+                        if ScriptState.resolverMethod == "Recalculate" then
+                            predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
+                        elseif ScriptState.resolverMethod == "Randomize" then
+                            predictedPosition = predictedPosition + Vector3.new(
+                                math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                                math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                                math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
+                            )
+                        elseif ScriptState.resolverMethod == "Invert" then
+                            predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
+                        end
+                    end
+
+                    local currentCameraPosition = Camera.CFrame.Position
+                    Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
+                else
+                    ScriptState.isLockedOn = false
+                    ScriptState.targetPlayer = nil
+                end
+            else
+                ScriptState.isLockedOn = false
+                ScriptState.targetPlayer = nil
+            end
         end
     end
 end)
@@ -1529,73 +1564,89 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     if Toggles.silentAimEnabled and Toggles.silentAimEnabled.Value and self == workspace and not checkcaller() and chance and allowedFireCall then
         local HitPart = ScriptState.ClosestHitPart or getClosestPlayer()
         
-        if not HitPart then
+        if not HitPart or typeof(HitPart) ~= "Instance" or not HitPart.Parent then
             return oldNamecall(...)
         end
 
-        if HitPart then
-            local ignoredList = getIgnoredList()
-            local originOptions = SilentAimSettings.Origin
-            local includeOptions = SilentAimSettings.Include
-            local originalOrigin = getOriginalOrigin()
+        if LocalPlayer.Character and HitPart:IsDescendantOf(LocalPlayer.Character) then
+            return oldNamecall(...)
+        end
 
-            if originalOrigin and originOptions and next(originOptions) then
-                local matchesOrigin = false
-                if isSelectionActive(originOptions, "Camera") and originalOrigin == Camera.CFrame.p then
-                    matchesOrigin = true
-                end
-
-                if not matchesOrigin then
-                    return oldNamecall(...)
+        local myVehicleName = GetPlayerVehicle(LocalPlayer)
+        if myVehicleName then
+            local isInMyVehicle = false
+            for veh, _ in pairs(VehicleCache) do
+                if typeof(veh) == "Instance" and veh.Name == myVehicleName and HitPart:IsDescendantOf(veh) then
+                    isInMyVehicle = true
+                    break
                 end
             end
+            if isInMyVehicle then
+                return oldNamecall(...)
+            end
+        end
 
-            if ignoredList and includeOptions and next(includeOptions) then
-                if isSelectionActive(includeOptions, "Camera") and not table.find(ignoredList, Camera) then
-                    return oldNamecall(...)
-                end
+        local ignoredList = getIgnoredList()
+        local originOptions = SilentAimSettings.Origin
+        local includeOptions = SilentAimSettings.Include
+        local originalOrigin = getOriginalOrigin()
 
-                local character = LocalPlayer.Character
-                if character and isSelectionActive(includeOptions, "Character") and not table.find(ignoredList, character) then
-                    return oldNamecall(...)
-                end
+        if originalOrigin and originOptions and next(originOptions) then
+            local matchesOrigin = false
+            if isSelectionActive(originOptions, "Camera") and originalOrigin == Camera.CFrame.p then
+                matchesOrigin = true
             end
 
-            local function computeRay(origin)
-                local adjustedOrigin = origin
-                if SilentAimSettings.BulletTP then
-                    adjustedOrigin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
-                end
+            if not matchesOrigin then
+                return oldNamecall(...)
+            end
+        end
 
-                local multiplier = SilentAimSettings.MultiplyUnitBy or 1000
-                local direction = getDirection(adjustedOrigin, HitPart.Position) * multiplier
-                return adjustedOrigin, direction
+        if ignoredList and includeOptions and next(includeOptions) then
+            if isSelectionActive(includeOptions, "Camera") and not table.find(ignoredList, Camera) then
+                return oldNamecall(...)
             end
 
-            if SilentAimSettings.SilentAimMethod == Method then
-                if Method == "Raycast" and ValidateArguments(Arguments, ExpectedArguments.Raycast) then
-                    local Origin = Arguments[2]
+            local character = LocalPlayer.Character
+            if character and isSelectionActive(includeOptions, "Character") and not table.find(ignoredList, character) then
+                return oldNamecall(...)
+            end
+        end
+
+        local function computeRay(origin)
+            local adjustedOrigin = origin
+            if SilentAimSettings.BulletTP then
+                adjustedOrigin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
+            end
+
+            local multiplier = SilentAimSettings.MultiplyUnitBy or 1000
+            local direction = getDirection(adjustedOrigin, HitPart.Position) * multiplier
+            return adjustedOrigin, direction
+        end
+
+        if SilentAimSettings.SilentAimMethod == Method then
+            if Method == "Raycast" and ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                local Origin = Arguments[2]
+                local NewOrigin, Direction = computeRay(Origin)
+                Arguments[2] = NewOrigin
+                Arguments[3] = Direction
+                return oldNamecall(unpack(Arguments))
+            elseif Method == "ViewportPointToRay" and SilentAimSettings.SilentAimMethod == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
+                    local Origin = Camera.CFrame.p
                     local NewOrigin, Direction = computeRay(Origin)
-                    Arguments[2] = NewOrigin
-                    Arguments[3] = Direction
-                    return oldNamecall(unpack(Arguments))
-                elseif Method == "ViewportPointToRay" and SilentAimSettings.SilentAimMethod == Method then
-                    if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
-                        local Origin = Camera.CFrame.p
-                        local NewOrigin, Direction = computeRay(Origin)
-                        return Ray.new(NewOrigin, Direction)
-                    end
-                elseif Method == "ScreenPointToRay" and SilentAimSettings.SilentAimMethod == Method then
-                    if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
-                        local Origin = Camera.CFrame.p
-                        local NewOrigin, Direction = computeRay(Origin)
-                        return Ray.new(NewOrigin, Direction)
-                    end
-                elseif Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == "CounterBlox" then
-                    local Origin, Direction = computeRay(Arguments[2].Origin)
-                    Arguments[2] = Ray.new(Origin, Direction)
-                    return oldNamecall(unpack(Arguments))
+                    return Ray.new(NewOrigin, Direction)
                 end
+            elseif Method == "ScreenPointToRay" and SilentAimSettings.SilentAimMethod == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
+                    local Origin = Camera.CFrame.p
+                    local NewOrigin, Direction = computeRay(Origin)
+                    return Ray.new(NewOrigin, Direction)
+                end
+            elseif Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == "CounterBlox" then
+                local Origin, Direction = computeRay(Arguments[2].Origin)
+                Arguments[2] = Ray.new(Origin, Direction)
+                return oldNamecall(unpack(Arguments))
             end
         end
     end
