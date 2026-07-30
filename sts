@@ -6,6 +6,8 @@ if not syn or not protectgui then
     getgenv().protectgui = function() end
 end
 
+local VIM = game:GetService("VirtualInputManager")
+
 if bypass_adonis then
     task.spawn(function()
         local g = getinfo or debug.getinfo
@@ -706,7 +708,6 @@ local GeneralTab = Window:AddTab("Main")
 local aimbox = GeneralTab:AddRightGroupbox("AimLock")
 local velbox = GeneralTab:AddRightGroupbox("Anti Lock")
 local frabox = GeneralTab:AddRightGroupbox("Movement")
-local ragebox = GeneralTab:AddLeftGroupbox("Rage")
 local ExploitTab = Window:AddTab("Exploits")
 local ACSEngineBox = ExploitTab:AddLeftGroupbox("ACS Engine")
 local VehicleModBox = ExploitTab:AddRightGroupbox("Vehicle Modifier")
@@ -845,7 +846,7 @@ AimLockButton.InputChanged:Connect(function(input)
 end)
 
 game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == dragInput and aimDragging then
+    if input == aimDragInput and aimDragging then
         aimUpdate(input)
     end
 end)
@@ -1107,74 +1108,96 @@ velbox:AddSlider("ReverseResolveIntensity", {
     end
 })
 
-getgenv().config = getgenv().config or {}
-getgenv().config.killRange = getgenv().config.killRange or 100
-ScriptState.rageEnabled = false
+local RageTab = Window:AddTab("Rage")
+local RageBox = RageTab:AddLeftGroupbox("Anti Rpg Spam")
 
-ragebox:AddToggle("rageEnabledToggle", {
-    Text = "Rage Mode",
+RageBox:AddToggle("AntiRpgSpam_Enabled", {
+    Text = "Enabled",
     Default = false,
     Callback = function(value)
-        ScriptState.rageEnabled = value
-    end
-})
-
-ragebox:AddSlider("killRangeSlider", {
-    Text = "Kill Range",
-    Default = 100,
-    Min = 10,
-    Max = 1000,
-    Rounding = 0,
-    Callback = function(value)
-        getgenv().config.killRange = value
-    end
-})
-
-local utils = {}
-function utils.desyncTo(meRoot, targetRoot)
-    if meRoot and targetRoot then
-        local originalVelocity = meRoot.Velocity
-        local direction = (targetRoot.Position - meRoot.Position).Unit
-        meRoot.Velocity = direction * ((ScriptState.reverseResolveIntensity or 5) * 1000)
-        RunService.RenderStepped:Wait()
-        meRoot.Velocity = originalVelocity
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    if ScriptState.rageEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local me = { rootpart = LocalPlayer.Character.HumanoidRootPart }
-        local targets = {}
-        
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                local head = player.Character:FindFirstChild("Head")
-                local rootpart = humanoid and humanoid.RootPart
-                
-                if head and rootpart and humanoid.Health > 0 then
-                    local distance = (me.rootpart.Position - rootpart.Position).Magnitude
-                    if distance <= (getgenv().config.killRange or 100) then
-                        table.insert(targets, {
-                            head = head,
-                            rootpart = rootpart,
-                            player = player
-                        })
-                    end
-                end
+        if not value then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
+            if ScriptState.OldSilentAim then
+                SilentAimSettings.Enabled = ScriptState.OldSilentAim.Enabled
+                SilentAimSettings.BulletTP = ScriptState.OldSilentAim.BulletTP
             end
+        else
+            ScriptState.OldSilentAim = {
+                Enabled = SilentAimSettings.Enabled,
+                BulletTP = SilentAimSettings.BulletTP
+            }
         end
+    end
+})
+
+RageBox:AddDropdown("AntiRpgSpam_Target", {
+    SpecialType = "Player",
+    Text = "Select Target",
+    Multi = false
+})
+
+local AntiRpgParams = RaycastParams.new()
+AntiRpgParams.FilterType = Enum.RaycastFilterType.Blacklist
+AntiRpgParams.IgnoreWater = true
+
+RunService.Heartbeat:Connect(function()
+    if not Toggles.AntiRpgSpam_Enabled.Value then return end
+    
+    local targetName = Options.AntiRpgSpam_Target.Value
+    if not targetName or targetName == "" then return end
+    
+    local targetPlayer = Players:FindFirstChild(targetName)
+    if not targetPlayer then return end
+    
+    local char = LocalPlayer.Character
+    local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    local targetChar = targetPlayer.Character
+    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+
+    if targetRoot then
+        task.spawn(function()
+            pcall(function()
+                LocalPlayer:RequestStreamAroundAsync(targetRoot.Position)
+            end)
+        end)
         
-        if #targets > 0 then
-            for _, target in ipairs(targets) do
-                utils.desyncTo(me.rootpart, target.rootpart)
-                ScriptState.ClosestHitPart = target.head
-                
-                if getgenv().WeaponOnHands then
-                    local tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        tool:Activate()
-                    end
+        if not targetChar:FindFirstChildOfClass("Highlight") then
+            local hl = Instance.new("Highlight")
+            hl.FillColor = Color3.fromRGB(255, 0, 0)
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.Parent = targetChar
+        end
+
+        local dist = (targetRoot.Position - myRoot.Position).Magnitude
+        local dir = (targetRoot.Position - myRoot.Position).Unit
+        
+        if dist > 8000 then
+            myRoot.CFrame = myRoot.CFrame + dir * ScriptState.flySpeed
+        elseif dist < 4000 then
+            myRoot.CFrame = myRoot.CFrame - dir * ScriptState.flySpeed
+        end
+
+        ScriptState.isLockedOn = true
+        ScriptState.targetPlayer = targetPlayer
+        SilentAimSettings.Enabled = true
+        SilentAimSettings.BulletTP = true
+        
+        AntiRpgParams.FilterDescendantsInstances = {char}
+        local origin = Camera.CFrame.Position
+        local direction = (targetRoot.Position - origin).Unit * 8000
+        
+        local result = workspace:Raycast(origin, direction, AntiRpgParams)
+        if result and result.Instance then
+            local model = result.Instance:FindFirstAncestorOfClass("Model")
+            if model and model == targetChar then
+                local hum = model:FindFirstChild("Humanoid")
+                if hum and hum.Health > 0 and dist >= 4000 and dist <= 8000 then
+                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.01)
+                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
                 end
             end
         end
@@ -1680,6 +1703,20 @@ local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method, Arguments = getnamecallmethod(), {...}
     local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
+
+    if Method == "FireServer" and ScriptState.Spoof_Enabled then
+        if self.Name == "BulletHit" then
+            if type(Arguments[6]) == "table" then
+                Arguments[6].Mode = ScriptState.Spoof_Mode or "Auto"
+                Arguments[6].FireRate = ScriptState.Spoof_FireRate or 8888
+                Arguments[6].MaxSpread = 0
+                Arguments[6].MaxRecoilPower = 0
+                Arguments[6].Distance = 25000
+                Arguments[6].BSpeed = 10000
+            end
+            return oldNamecall(unpack(Arguments))
+        end
+    end
 
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
     if Method == "Destroy" and self == Client then
@@ -2796,6 +2833,12 @@ local function applyGunSettings(weapon, property, value)
             if success and type(module) == "table" then
                 module.Mode = value
                 if module.CurrentFireMode then module.CurrentFireMode = value end
+                if module.FireModes and type(module.FireModes) == "table" then
+                    for k, v in pairs(module.FireModes) do
+                        module.FireModes[k] = false
+                    end
+                    module.FireModes[value] = true
+                end
             end
         end
 
@@ -2872,7 +2915,6 @@ end
 ACSEngineBox:AddToggle("WeaponOnHands", {
     Text = "Weapon In Hands",
     Default = false,
-    Tooltip = "Apply changes only to the weapon in hands if enabled.",
     Callback = function(value)
         getgenv().WeaponOnHands = value
     end
@@ -2882,10 +2924,29 @@ ACSEngineBox:AddDropdown("WeaponModifyMethod", {
     Text = "Weapon Modify Method",
     Default = "Attribute",
     Values = {"Attribute", "Require"},
-    Tooltip = "Choose how to modify weapon settings",
     Callback = function(value)
         getgenv().WeaponModifyMethod = value
     end
+})
+
+ACSEngineBox:AddToggle("Spoof_Enabled", {
+    Text = "Enable Fire Spoofer",
+    Default = false,
+    Callback = function(value) ScriptState.Spoof_Enabled = value end
+})
+
+ACSEngineBox:AddDropdown("Spoof_Mode", {
+    Text = "Spoof Fire Mode",
+    Default = "Auto",
+    Values = {"Auto", "Semi", "Burst"},
+    Callback = function(value) ScriptState.Spoof_Mode = value end
+})
+
+ACSEngineBox:AddInput("Spoof_FireRate", {
+    Text = "Spoof Fire Rate",
+    Default = "8888",
+    Numeric = true,
+    Callback = function(value) ScriptState.Spoof_FireRate = tonumber(value) or 8888 end
 })
 
 ACSEngineBox:AddButton('INF AMMO', function()
@@ -2913,7 +2974,6 @@ end)
 ACSEngineBox:AddInput("BulletSpeedInput", {
     Text = "Bullet Speed",
     Default = "10000",
-    Tooltip = "Set the bullet speed",
     Callback = function(value)
         getgenv().bulletSpeedValue = tonumber(value) or 10000
     end
@@ -2927,7 +2987,6 @@ end)
 local fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
     Text = 'Enter Fire Rate',
     Default = '8888',
-    Tooltip = 'Type the fire rate value you want to apply.',
 })
 
 ACSEngineBox:AddButton('CHANGE FIRE RATE', function()
@@ -2939,7 +2998,6 @@ end)
 local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
     Text = 'Enter Bullets',
     Default = '50',
-    Tooltip = 'Type the number of bullets you want to apply.',
     Numeric = true
 })
 
@@ -2951,7 +3009,6 @@ end)
 local inputField = ACSEngineBox:AddInput('FireModeInput', {
     Text = 'Enter Fire Mode',
     Default = 'Auto',
-    Tooltip = 'Type the fire mode you want to apply.',
 })
 
 ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
@@ -3070,93 +3127,254 @@ for _, gui in ipairs(PlayerGui:GetChildren()) do
     task.spawn(autoApplyGUIWeapon, gui)
 end
 
-local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
-ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
-ScriptState.strafeMode, ScriptState.strafeTargetPart = "Horizontal", nil
-local function startTargetStrafe()
-    local targetPart = getClosestPlayer()
-    ScriptState.strafeTargetPart = targetPart
-    if ScriptState.strafeTargetPart and ScriptState.strafeTargetPart.Parent then
-        ScriptState.originalCameraMode = Players.LocalPlayer.CameraMode
-        Players.LocalPlayer.CameraMode = Enum.CameraMode.Classic
-        local targetPos = ScriptState.strafeTargetPart.Position
-        LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos))
-        Camera.CameraSubject = ScriptState.strafeTargetPart.Parent:FindFirstChild("Humanoid")
-    end
-end
+local AACBox = GeneralTab:AddLeftGroupbox("Advanced Auto Combat")
 
-local function strafeAroundTarget()
-    if not (ScriptState.strafeTargetPart and ScriptState.strafeTargetPart.Parent) then return end
-    local targetPos = ScriptState.strafeTargetPart.Position
-    local angle = tick() * (ScriptState.strafeSpeed / 10)
-    local offset = ScriptState.strafeMode == "Horizontal"
-        and Vector3.new(math.cos(angle) * ScriptState.strafeRadius, 0, math.sin(angle) * ScriptState.strafeRadius)
-        or Vector3.new(math.cos(angle) * ScriptState.strafeRadius, ScriptState.strafeRadius, math.sin(angle) * ScriptState.strafeRadius)
-    LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos + offset))
-    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, targetPos)
-end
+ScriptState.AAC_State = "Idle"
+ScriptState.stopFrameCount = 0
+ScriptState.lastMoveDirection = Vector3.zero
+ScriptState.lastRootPosition = nil
 
-local function stopTargetStrafe()
-    Players.LocalPlayer.CameraMode = ScriptState.originalCameraMode or Enum.CameraMode.Classic
-    Camera.CameraSubject = LocalPlayer.Character.Humanoid
-    ScriptState.strafeEnabled, ScriptState.strafeTargetPart = false, nil
-end
-targetStrafe:AddToggle("strafeToggle", {
-    Text = "Target Strafe",
+AACBox:AddToggle("AAC_Enabled", {
+    Text = "Enable AAC",
     Default = false,
-    Tooltip = "Enable or disable Target Strafe.",
     Callback = function(value)
-        ScriptState.strafeEnabled = value
-        if ScriptState.strafeEnabled then
-            startTargetStrafe()
-        else
-            stopTargetStrafe()
+        if AACActivateButton then
+            AACActivateButton.Visible = value
         end
     end
-}):AddKeyPicker("strafeToggleKey", {
+})
+
+AACBox:AddDropdown("AAC_Mode", {
+    Text = "Mode",
+    Default = "PatZoom",
+    Values = {"PatZoom", "Lean"}
+})
+
+AACBox:AddInput("AAC_ShieldName", {
+    Text = "Shield Tool Name",
+    Default = "",
+    Callback = function(value) ScriptState.AAC_ShieldName = value end
+})
+
+AACBox:AddInput("AAC_GunName", {
+    Text = "Gun Tool Name",
+    Default = "",
+    Callback = function(value) ScriptState.AAC_GunName = value end
+})
+
+AACBox:AddSlider("AAC_Delay", {
+    Text = "PatZoom Delay",
+    Default = 0.05,
+    Min = 0,
+    Max = 0.2,
+    Rounding = 2
+})
+
+AACBox:AddLabel("PC Combo Keybind"):AddKeyPicker("AAC_ActivateKey", {
     Default = "None",
-    SyncToggleState = true,
+    SyncToggleState = false,
     Mode = "Toggle",
-    Text = "Target Strafe",
-    Tooltip = "Key to toggle Target Strafe",
-    Callback = function(value)
-        ScriptState.strafeEnabled = value
-        if ScriptState.strafeEnabled then
-            startTargetStrafe()
+    Text = "AAC Combo",
+    Callback = function(state)
+        if state then
+            ScriptState.AAC_State = "Initializing"
+            ScriptState.stopFrameCount = 0
+            ScriptState.lastMoveDirection = Vector3.zero
         else
-            stopTargetStrafe()
+            ScriptState.AAC_State = "Idle"
         end
     end
 })
 
-targetStrafe:AddDropdown("strafeModeDropdown", {
-    AllowNull = false,
-    Text = "Target Strafe Mode",
-    Default = "Horizontal",
-    Values = {"Horizontal", "UP"},
-    Tooltip = "Select the strafing mode.",
-    Callback = function(value) ScriptState.strafeMode = value end
-})
+local AACActivateButton = Instance.new("TextButton")
+AACActivateButton.Parent = ScreenGui
+AACActivateButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AACActivateButton.Size = UDim2.new(0, 80, 0, 30)
+AACActivateButton.Position = UDim2.new(1, -100, 0.5, 105)
+AACActivateButton.Text = "ACTIVATE"
+AACActivateButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AACActivateButton.Font = Enum.Font.Code
+AACActivateButton.TextSize = 14
+AACActivateButton.BorderSizePixel = 0
+AACActivateButton.Active = true
+AACActivateButton.Visible = false
 
-targetStrafe:AddSlider("strafeRadiusSlider", {
-    Text = "Strafe Radius",
-    Default = 5,
-    Min = 1,
-    Max = 20,
-    Rounding = 1,
-    Tooltip = "Set the radius of movement around the target.",
-    Callback = function(value) ScriptState.strafeRadius = value end
-})
+local AACUIStroke = Instance.new("UIStroke")
+AACUIStroke.Thickness = 1.5
+AACUIStroke.Color = Color3.fromRGB(255, 165, 0)
+AACUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+AACUIStroke.Parent = AACActivateButton
 
-targetStrafe:AddSlider("strafeSpeedSlider", {
-    Text = "Strafe Speed",
-    Default = 50,
-    Min = 10,
-    Max = 200,
-    Rounding = 1,
-    Tooltip = "Set the speed of strafing around the target.",
-    Callback = function(value) ScriptState.strafeSpeed = value end
-})
+AACActivateButton.MouseButton1Down:Connect(function()
+    ScriptState.AAC_State = "Initializing"
+    ScriptState.stopFrameCount = 0
+    ScriptState.lastMoveDirection = Vector3.zero
+    AACUIStroke.Color = Color3.fromRGB(0, 255, 0)
+end)
+
+AACActivateButton.MouseButton1Up:Connect(function()
+    ScriptState.AAC_State = "Idle"
+    AACUIStroke.Color = Color3.fromRGB(255, 165, 0)
+end)
+
+local aacDragging, aacDragInput, aacDragStart, aacStartPos
+local function aacUpdate(input)
+    local delta = input.Position - aacDragStart
+    AACActivateButton.Position = UDim2.new(
+        aacStartPos.X.Scale,
+        aacStartPos.X.Offset + delta.X,
+        aacStartPos.Y.Scale,
+        aacStartPos.Y.Offset + delta.Y
+    )
+end
+
+AACActivateButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        aacDragging = true
+        aacDragStart = input.Position
+        aacStartPos = AACActivateButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                aacDragging = false
+            end
+        end)
+    end
+end)
+
+AACActivateButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        aacDragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == aacDragInput and aacDragging then
+        aacUpdate(input)
+    end
+end)
+
+local function equipToolFromBackpack(toolName)
+    if toolName == "" then return end
+    local tool = LocalPlayer.Backpack:FindFirstChild(toolName)
+    if tool then
+        local settingsModule
+        for _, m in ipairs(tool:GetDescendants()) do
+            if m:IsA("ModuleScript") and m.Name == "Settings" then
+                settingsModule = m
+                break
+            end
+        end
+        local ok, modTable = false, {}
+        if settingsModule then
+            ok, modTable = pcall(require, settingsModule)
+        end
+        local Event = game:GetService("ReplicatedStorage"):FindFirstChild("ACS_Engine")
+        if Event then
+            Event = Event:FindFirstChild("Events")
+            if Event then
+                Event = Event:FindFirstChild("Equip")
+                if Event then
+                    Event:FireServer(tool, ok and type(modTable) == "table" and modTable or {})
+                end
+            end
+        end
+    end
+end
+
+local function executeAACCombo()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    if not hum then return end
+
+    if Options.AAC_Mode.Value == "PatZoom" then
+        equipToolFromBackpack(ScriptState.AAC_ShieldName)
+        task.wait(0.1)
+        
+        hum.Jump = true
+        
+        task.wait(Options.AAC_Delay.Value)
+        
+        equipToolFromBackpack(ScriptState.AAC_GunName)
+        task.wait(0.1)
+        
+        local oldSilent = SilentAimSettings.Enabled
+        local oldLock = ScriptState.lockEnabled
+        SilentAimSettings.Enabled = true
+        ScriptState.lockEnabled = true
+
+        VIM:SendMouseButtonEvent(0, 0, 1, true, game, 0)
+        task.wait(0.05)
+        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.05)
+        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        task.wait(0.05)
+        VIM:SendMouseButtonEvent(0, 0, 1, false, game, 0)
+
+        SilentAimSettings.Enabled = oldSilent
+        ScriptState.lockEnabled = oldLock
+        
+    elseif Options.AAC_Mode.Value == "Lean" then
+        equipToolFromBackpack(ScriptState.AAC_ShieldName)
+        task.wait(0.1)
+        
+        local isLeft = ScriptState.lastMoveDirection.X < 0
+        local leanVal = isLeft and -1 or 1
+        local StanceRemote = game:GetService("ReplicatedStorage"):FindFirstChild("ACS_Engine")
+        if StanceRemote then
+            StanceRemote = StanceRemote:FindFirstChild("Events")
+            if StanceRemote then
+                StanceRemote = StanceRemote:FindFirstChild("Stance")
+                if StanceRemote then StanceRemote:FireServer(0, leanVal) end
+            end
+        end
+        
+        task.wait(0.05)
+        equipToolFromBackpack(ScriptState.AAC_GunName)
+        task.wait(0.1)
+        
+        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.05)
+        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        task.wait(0.05)
+        
+        if StanceRemote then StanceRemote:FireServer(0, 0) end
+    end
+    
+    ScriptState.AAC_State = "Idle"
+    if AACUIStroke then
+        AACUIStroke.Color = Color3.fromRGB(255, 165, 0)
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if ScriptState.AAC_State ~= "Initializing" then return end
+    
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChild("Humanoid")
+    
+    if root and hum then
+        if hum.MoveDirection.Magnitude > 0 then
+            ScriptState.lastMoveDirection = hum.MoveDirection
+        end
+        
+        local currentPos = root.Position
+        if ScriptState.lastRootPosition then
+            if (currentPos - ScriptState.lastRootPosition).Magnitude < 0.1 then
+                ScriptState.stopFrameCount = ScriptState.stopFrameCount + 1
+            else
+                ScriptState.stopFrameCount = 0
+            end
+        end
+        ScriptState.lastRootPosition = currentPos
+
+        if ScriptState.stopFrameCount >= 5 then
+            ScriptState.AAC_State = "Executing"
+            task.spawn(executeAACCombo)
+        end
+    end
+end)
 
 local keybindWatchers = {}
 
@@ -3218,7 +3436,6 @@ registerKeybindWatcher("silentAimEnabled", "silentAim_KeyPicker", {
 registerKeybindWatcher("speedEnabled", "speedToggleKey")
 registerKeybindWatcher("flyEnabled", "flyToggleKey")
 registerKeybindWatcher("noClipEnabled", "noClipToggleKey")
-registerKeybindWatcher("strafeToggle", "strafeToggleKey")
 
 RunService.RenderStepped:Connect(function()
     for _, watcher in ipairs(keybindWatchers) do
@@ -3240,12 +3457,6 @@ RunService.RenderStepped:Connect(function()
                 watcher.stateChanged(state)
             end
         end
-    end
-end)
-
-RunService.RenderStepped:Connect(function()
-    if ScriptState.strafeEnabled then
-        strafeAroundTarget()
     end
 end)
 
