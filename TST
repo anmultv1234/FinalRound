@@ -1,0 +1,543 @@
+-- ============================================================================
+--  War Tycoon — Mobile Kill Aura | RPG Spam + Sniper
+--  Simple checkbox toggle | CoreGui injection
+-- ============================================================================
+
+local Players            = game:GetService("Players")
+local LocalPlayer        = Players.LocalPlayer
+local RunService         = game:GetService("RunService")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local UserInputService   = game:GetService("UserInputService")
+
+-- ============================================================================
+--  STATE
+-- ============================================================================
+local enabled       = false
+local mode          = "Explode"     -- Explode / Rocket / Bullet
+local spamSpeed     = 8
+local shotsPerTick  = 5
+local killRange     = 8000
+local targetMode    = "All"         -- All / Closest / Random
+local teamCheck     = true
+local autoEquip     = true
+
+-- ============================================================================
+--  WEAPONS
+-- ============================================================================
+local RPG_WEAPONS     = { "RPG", "Javelin", "Stinger" }
+local SNIPER_WEAPONS  = { "M40 Sniper", "M107", "Barrett", "L96", "MSR", "AWP" }
+local AR_WEAPONS      = { "M4A1", "AK-47", "SCAR-H", "G36C", "AUG", "M16A4" }
+local SMG_WEAPONS     = { "MP5", "UMP45", "P90", "Vector" }
+local SHOTGUN_WEAPONS = { "Remington 870", "SPAS-12", "AA-12" }
+
+local WEAPON_PRIORITY = {}
+for _, v in ipairs(SNIPER_WEAPONS)  do table.insert(WEAPON_PRIORITY, v) end
+for _, v in ipairs(RPG_WEAPONS)      do table.insert(WEAPON_PRIORITY, v) end
+for _, v in ipairs(AR_WEAPONS)       do table.insert(WEAPON_PRIORITY, v) end
+for _, v in ipairs(SMG_WEAPONS)      do table.insert(WEAPON_PRIORITY, v) end
+for _, v in ipairs(SHOTGUN_WEAPONS)  do table.insert(WEAPON_PRIORITY, v) end
+
+local ALL_RANGED = {}
+for _, v in ipairs(WEAPON_PRIORITY) do ALL_RANGED[v] = true end
+
+local function isRPG(name)
+    for _, v in ipairs(RPG_WEAPONS) do if v == name then return true end end
+    return false
+end
+
+-- ============================================================================
+--  nil INSTANCE CACHE
+-- ============================================================================
+local nilCache = {}
+
+local function getNilInstance(pattern)
+    if nilCache[pattern] then
+        local ok = pcall(function() local _ = nilCache[pattern].Name end)
+        if ok then return nilCache[pattern] end
+        nilCache[pattern] = nil
+    end
+    local ok, instances = pcall(function() return getnilinstances() end)
+    if ok and instances then
+        for _, obj in ipairs(instances) do
+            if obj.Name == pattern or obj.Name:find(pattern) then
+                nilCache[pattern] = obj
+                return obj
+            end
+        end
+    end
+    local bfs = ReplicatedStorage:FindFirstChild("BulletFireSystem")
+    if bfs then
+        for _, child in ipairs(bfs:GetDescendants()) do
+            if (child:IsA("Model") or child:IsA("Tool") or child:IsA("BasePart"))
+                and (child.Name == pattern or child.Name:find(pattern)) then
+                nilCache[pattern] = child
+                return child
+            end
+        end
+    end
+    return nil
+end
+
+-- ============================================================================
+--  REMOTE CACHE
+-- ============================================================================
+local remotes = {}
+
+local function initRPG()
+    if remotes.RPG then return true end
+    pcall(function()
+        local rs = ReplicatedStorage:WaitForChild("RocketSystem")
+        local ev = rs:WaitForChild("Events")
+        remotes.RPG = {
+            FireRocket       = ev:WaitForChild("FireRocket"),
+            FireRocketClient = ev:WaitForChild("FireRocketClient"),
+            RocketHit        = ev:WaitForChild("RocketHit"),
+            RocketModel      = rs:WaitForChild("Rockets"):FindFirstChild("RPG Rocket"),
+        }
+    end)
+    return remotes.RPG ~= nil
+end
+
+local function initBullet()
+    if remotes.Bullet then return true end
+    pcall(function()
+        local bfs = ReplicatedStorage:WaitForChild("BulletFireSystem")
+        remotes.Bullet = {
+            FireGun   = bfs:WaitForChild("FireGun"),
+            HitEvent  = bfs:FindFirstChild("HitEvent")
+                     or bfs:FindFirstChild("BulletHit")
+                     or bfs:FindFirstChild("OnHit"),
+        }
+    end)
+    return remotes.Bullet ~= nil
+end
+
+-- ============================================================================
+--  WEAPON UTILS
+-- ============================================================================
+local function findWeaponAnywhere(name)
+    local char = LocalPlayer.Character
+    if char then
+        local tool = char:FindFirstChild(name)
+        if tool and tool:IsA("Tool") then return tool, "Character" end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        local tool = bp:FindFirstChild(name)
+        if tool and tool:IsA("Tool") then return tool, "Backpack" end
+    end
+    return nil, nil
+end
+
+local function getActiveWeapon()
+    local char = LocalPlayer.Character
+    if not char then return nil, nil, nil end
+    for _, name in ipairs(WEAPON_PRIORITY) do
+        local tool = char:FindFirstChild(name)
+        if tool and tool:IsA("Tool") then return tool, name, "Character" end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, name in ipairs(WEAPON_PRIORITY) do
+            local tool = bp:FindFirstChild(name)
+            if tool and tool:IsA("Tool") then return tool, name, "Backpack" end
+        end
+    end
+    return nil, nil, nil
+end
+
+local function equipBestWeapon()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+    local _, currentName, loc = getActiveWeapon()
+    if currentName and loc == "Character" then return currentName end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if not bp then return nil end
+    for _, name in ipairs(WEAPON_PRIORITY) do
+        local tool = bp:FindFirstChild(name)
+        if tool and tool:IsA("Tool") then
+            humanoid:EquipTool(tool)
+            return name
+        end
+    end
+    return nil
+end
+
+-- ============================================================================
+--  TEAM & TARGET
+-- ============================================================================
+local function getTeamTag(player)
+    if player.Team then return player.Team end
+    if player.TeamColor then return tostring(player.TeamColor) end
+    local ls = player:FindFirstChild("leaderstats")
+    if ls then
+        local t = ls:FindFirstChild("Team")
+        if t then return t.Value end
+    end
+    return nil
+end
+
+local function isEnemy(player)
+    if player == LocalPlayer then return false end
+    if not teamCheck then return true end
+    local mt = getTeamTag(LocalPlayer)
+    local tt = getTeamTag(player)
+    if not mt or not tt then return true end
+    return mt ~= tt
+end
+
+local function getPlayerHead(player)
+    local char = player.Character
+    if not char then return nil end
+    return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getAllEnemiesInRange()
+    local myChar = LocalPlayer.Character
+    if not myChar then return {} end
+    local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return {} end
+    local myPos = myHrp.Position
+    local enemies = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isEnemy(player) then
+            local char = player.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local head = getPlayerHead(player)
+                if hrp then
+                    local dist = (hrp.Position - myPos).Magnitude
+                    if dist <= killRange then
+                        table.insert(enemies, {
+                            player       = player,
+                            distance     = dist,
+                            head         = head,
+                            headPosition = head and head.Position or hrp.Position,
+                            hrp          = hrp,
+                            hrpPosition  = hrp.Position,
+                        })
+                    end
+                end
+            end
+        end
+    end
+    table.sort(enemies, function(a, b) return a.distance < b.distance end)
+    return enemies
+end
+
+local function selectTargets()
+    local enemies = getAllEnemiesInRange()
+    if #enemies == 0 then return {} end
+    if targetMode == "Closest" then return { enemies[1] } end
+    if targetMode == "Random"  then return { enemies[math.random(1, #enemies)] } end
+    return enemies
+end
+
+-- ============================================================================
+--  FIRE FUNCTIONS
+-- ============================================================================
+local RPG_PAYLOAD = {
+    ["expShake"]          = { ["fadeInTime"]=0.05, ["magnitude"]=3, ["rotInfluence"]={0.4,0,0.4}, ["fadeOutTime"]=0.5, ["posInfluence"]={1,1,0}, ["roughness"]=3 },
+    ["gravity"]           = Vector3.new(0, -20, 0),
+    ["HelicopterDamage"]  = 450, ["FireRate"] = 15, ["VehicleDamage"] = 350,
+    ["ExpName"]           = "RPG", ["ExpRadius"] = 12, ["BoatDamage"] = 300,
+    ["TankDamage"]        = 300, ["Acceleration"] = 8, ["ShieldDamage"] = 170,
+    ["Distance"]          = 4000, ["PlaneDamage"] = 500, ["GunshipDamage"] = 170,
+    ["velocity"]          = 200, ["ExplosionDamage"] = 120,
+}
+
+local function fireRPG_Explode(target, weaponName, tool)
+    local r = remotes.RPG
+    if not r then return end
+    local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    local myPos = myHrp.Position
+    local targetPos = target.headPosition or target.hrpPosition
+    local direction = (targetPos - myPos).Unit
+    r.FireRocket:InvokeServer(direction, tool, tool, targetPos)
+    if target.head and r.RocketHit then
+        r.RocketHit:FireServer(targetPos, direction, tool, tool, target.head, target.head, LocalPlayer.Name.."_RK_"..math.random(100000,999999))
+    end
+end
+
+local function fireRPG_Rocket(target, weaponName, tool)
+    local r = remotes.RPG
+    if not r then return end
+    local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    local myPos = myHrp.Position
+    local targetPos = target.headPosition or target.hrpPosition
+    local direction = (targetPos - myPos).Unit
+    r.FireRocket:InvokeServer(direction, tool, tool, targetPos)
+    if r.FireRocketClient and r.RocketModel then
+        r.FireRocketClient:Fire(targetPos, direction, RPG_PAYLOAD, r.RocketModel, tool, tool, LocalPlayer)
+    end
+end
+
+local function fireBullet(target, weaponName, tool, loc)
+    local b = remotes.Bullet
+    if not b then return end
+    local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    local myPos = myHrp.Position
+    local targetPos = target.headPosition or target.hrpPosition
+    local direction = (targetPos - myPos).Unit
+    local nilWep = getNilInstance("S"..weaponName) or getNilInstance(weaponName)
+    b.FireGun:FireServer({ direction }, tool, nilWep or tool, targetPos, false)
+    if b.HitEvent and target.head then
+        b.HitEvent:FireServer(targetPos, { direction }, tool, nilWep or tool, target.head, target.head, LocalPlayer.Name.."_BL_"..math.random(100000,999999))
+    end
+end
+
+-- ============================================================================
+--  MAIN LOOP
+-- ============================================================================
+local function execute()
+    if not enabled then return end
+    local tool, weaponName, loc = getActiveWeapon()
+    if not tool then
+        if autoEquip then equipBestWeapon() end
+        return
+    end
+    if isRPG(weaponName) then
+        if not initRPG() then return end
+    else
+        if not initBullet() then return end
+    end
+    local targets = selectTargets()
+    if #targets == 0 then return end
+    for _, target in ipairs(targets) do
+        if not enabled then break end
+        if not target.head and not target.hrp then goto continue_target end
+        for _ = 1, shotsPerTick do
+            if not enabled then break end
+            if isRPG(weaponName) then
+                if mode == "Explode" then fireRPG_Explode(target, weaponName, tool)
+                else fireRPG_Rocket(target, weaponName, tool) end
+            else
+                fireBullet(target, weaponName, tool, loc)
+            end
+        end
+        ::continue_target::
+    end
+end
+
+local acc = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not enabled then acc = 0; return end
+    local interval = math.max(0.01, 1/spamSpeed)
+    acc = acc + dt
+    if acc >= interval then acc = acc - interval; execute() end
+end)
+
+-- ============================================================================
+--  COREGUI INJECTION — multiple fallbacks for every executor
+-- ============================================================================
+local function getCoreGuiParent()
+    -- Method 1: gethui() — Fluxus, KRNL, Hydrogen, Vega X
+    local ok, result = pcall(function() return gethui() end)
+    if ok and result then return result end
+
+    -- Method 2: syn.protect_gui() — Synapse X
+    ok, result = pcall(function()
+        local sg = Instance.new("ScreenGui")
+        syn.protect_gui(sg)
+        sg.Parent = game:GetService("CoreGui")
+        return sg.Parent
+    end)
+    if ok and result then return result end
+
+    -- Method 3: cloneref + CoreGui — ScriptWare
+    ok, result = pcall(function()
+        return cloneref(game:GetService("CoreGui"))
+    end)
+    if ok and result then return result end
+
+    -- Method 4: game:GetService("CoreGui") — Standard
+    ok, result = pcall(function() return game:GetService("CoreGui") end)
+    if ok and result then return result end
+
+    -- Method 5: game.CoreGui — Older executors
+    ok, result = pcall(function() return game.CoreGui end)
+    if ok and result then return result end
+
+    -- Final fallback: PlayerGui
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ============================================================================
+--  MOBILE GUI — Simple Checkbox Toggle
+-- ============================================================================
+local parent = getCoreGuiParent()
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WT_KillAura"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = parent
+
+-- Main frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 200, 0, 200)
+MainFrame.Position = UDim2.new(0.5, -100, 0.5, -100)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 8)
+Title.BackgroundTransparency = 1
+Title.Text = "KILL AURA"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+-- Status indicator
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -16, 0, 24)
+StatusLabel.Position = UDim2.new(0, 8, 0, 38)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "OFF"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+StatusLabel.TextSize = 20
+StatusLabel.Font = Enum.Font.GothamBold
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+StatusLabel.Parent = MainFrame
+
+-- Toggle button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -32, 0, 50)
+ToggleBtn.Position = UDim2.new(0, 16, 0, 70)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 30, 30)
+ToggleBtn.Text = "ENABLE"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 16
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = MainFrame
+
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 8)
+BtnCorner.Parent = ToggleBtn
+
+-- Mode label
+local ModeLabel = Instance.new("TextLabel")
+ModeLabel.Size = UDim2.new(1, -16, 0, 20)
+ModeLabel.Position = UDim2.new(0, 8, 0, 128)
+ModeLabel.BackgroundTransparency = 1
+ModeLabel.Text = "Mode: " .. mode
+ModeLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+ModeLabel.TextSize = 12
+ModeLabel.Font = Enum.Font.Gotham
+ModeLabel.Parent = MainFrame
+
+-- Range label
+local RangeLabel = Instance.new("TextLabel")
+RangeLabel.Size = UDim2.new(1, -16, 0, 20)
+RangeLabel.Position = UDim2.new(0, 8, 0, 148)
+RangeLabel.BackgroundTransparency = 1
+RangeLabel.Text = "Range: " .. killRange .. " studs"
+RangeLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+RangeLabel.TextSize = 12
+RangeLabel.Font = Enum.Font.Gotham
+RangeLabel.Parent = MainFrame
+
+-- Target label
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -16, 0, 20)
+TargetLabel.Position = UDim2.new(0, 8, 0, 168)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "Target: " .. targetMode
+TargetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+TargetLabel.TextSize = 12
+TargetLabel.Font = Enum.Font.Gotham
+TargetLabel.Parent = MainFrame
+
+-- ============================================================================
+--  TOGGLE LOGIC
+-- ============================================================================
+local function setEnabled(val)
+    enabled = val
+    if enabled then
+        StatusLabel.Text = "ON"
+        StatusLabel.TextColor3 = Color3.fromRGB(60, 255, 60)
+        ToggleBtn.Text = "DISABLE"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 180, 30)
+    else
+        StatusLabel.Text = "OFF"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+        ToggleBtn.Text = "ENABLE"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 30, 30)
+    end
+end
+
+-- Button click (mobile tap)
+ToggleBtn.MouseButton1Click:Connect(function()
+    setEnabled(not enabled)
+end)
+
+-- TouchTap for mobile
+ToggleBtn.TouchTap:Connect(function()
+    setEnabled(not enabled)
+end)
+
+-- Keyboard Q toggle (PC)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        setEnabled(not enabled)
+    end
+end)
+
+-- ============================================================================
+--  PERIODIC CACHE REFRESH
+-- ============================================================================
+task.spawn(function()
+    while true do
+        task.wait(30)
+        nilCache = {}
+        pcall(initRPG)
+        pcall(initBullet)
+    end
+end)
+
+-- ============================================================================
+--  LOAD NOTIFICATION
+-- ============================================================================
+local notif = Instance.new("TextLabel")
+notif.Size = UDim2.new(0, 300, 0, 30)
+notif.Position = UDim2.new(0.5, -150, 0, 10)
+notif.BackgroundColor3 = Color3.fromRGB(30, 180, 30)
+notif.BackgroundTransparency = 0.2
+notif.Text = "Kill Aura Loaded | Q to toggle | Drag to move"
+notif.TextColor3 = Color3.fromRGB(255, 255, 255)
+notif.TextSize = 14
+notif.Font = Enum.Font.Gotham
+notif.Parent = ScreenGui
+
+local NotifCorner = Instance.new("UICorner")
+NotifCorner.CornerRadius = UDim.new(0, 6)
+NotifCorner.Parent = notif
+
+-- Auto-hide notification after 5s
+task.delay(5, function()
+    for i = 1, 0, -0.05 do
+        notif.BackgroundTransparency = math.min(1, notif.BackgroundTransparency + 0.05)
+        notif.TextTransparency = math.min(1, notif.TextTransparency + 0.05)
+        task.wait(0.05)
+    end
+    pcall(function() notif:Destroy() end)
+end)
