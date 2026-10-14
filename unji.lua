@@ -1,15 +1,22 @@
--- ACS Framework Compatible Exploit GUI (v2)
--- War Tycoon (ACS) — verified against recovered BSMT script (remote names/payload keys)
+-- ACS Framework Compatible Exploit GUI (v3)
+-- War Tycoon (ACS) — 검증 완료: recovered_full.lua 실제 메커니즘 기반
 --
--- 변경점 (v1 대비):
---  * Service 미정의 버그 수정
---  * 로켓 페이로드를 실제 스크립트와 동일하게: Origin/Direction/Settings/RocketModel/
---    Vehicle/Weapon/PlrFired/Label/Target  +  FireRocketBindable:Fire(LocalPlayer, payload)
---  * RocketModel 경로 수정: RocketSystem.Rockets 에서 "<무기이름> G-Rocket" 검색
---  * Gun Mods: 개별 토글 6종 + 원본값 저장/복원, 장착 중인 총에도 즉시 적용
---  * 모든 토글이 getgenv() 키도 함께 세팅 (BSMT 스크립트가 로드되어 있으면 연동)
---  * Kill Aura / 이동기(Fly, Noclip, Inf Jump, WalkSpeed) 추가
---  * UI: UIListLayout 자동 정렬, 토글 상태 표시, 우측 Ctrl 로 GUI 숨김/표시
+-- v2 → v3 변경점 (사용자 지시 반영):
+--  * RPG Aura 거리 150 → 4000 스터드 (getgenv().rocketaura_range = 4000 도 동기화)
+--  * Kill Aura 거리 150 → 8000 스터드
+--  * Full Auto: 모드(Mode)를 "Auto"로 바꾸지 않고, 서버는 Semi/Bolt 로 인식하게 유지한 채
+--    클라이언트에서 tool:Activate() 를 서버-안전 주기(FireRate/60 초당, 최대 20/s)로 반복 호출.
+--    → recovered SGA auto-trigger(root.47) 의 (r1 - u3) < (1 / r5) 메커니즘을 그대로 재현.
+--    (Mode="Auto" 로 패치하면 서버가 Auto 로 믿고 레이트리밋/거부하여 데미지가 안 들어갔음)
+--  * Infinite Ammo: 한 번 설정이 아니라 Heartbeat 루프로 tool.ammo.Value = 600 지속 고정.
+--    → recovered root.89 의 r10[ammo][Value] = 600 지속 설정 메커니즘 재현.
+--
+-- 근거 (recovered_full.lua):
+--   root.88  (gun-mods 설정 패치: Ammo/AmmoVal/Mode/FireRate/Recoil)
+--   root.89  (getgenv() gm_* 토글 상태 → 설정 테이블 지속 적용 루프)
+--   root.47  (SGA auto-trigger: 1/FireRate 주기로 자동 발사)
+--   root.103/104 (rocket aura: getgenv().rocketaura_range, (posA-posB).Magnitude <= range)
+--   root.105/106 (rocketaura 토글 / rocketaura_range 세터)
 
 local CoreGui           = game:GetService("CoreGui")
 local Players           = game:GetService("Players")
@@ -25,7 +32,6 @@ end
 
 ----------------------------------------------------------------
 -- BSMT 호환: 기능 토글 시 getgenv() 키도 함께 갱신
--- (recovered_full.lua 스크립트가 함께 실행 중이면 그 쪽 루프가 이 키를 읽음)
 ----------------------------------------------------------------
 local function syncEnv(key, value)
 	pcall(function()
@@ -55,7 +61,7 @@ Title.Parent = MainFrame
 Title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 Title.Size = UDim2.new(1, 0, 0, 36)
 Title.Font = Enum.Font.GothamBold
-Title.Text = "ACS Framework Exploit Panel"
+Title.Text = "ACS Framework Exploit Panel (v3)"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 14
 Title.BorderSizePixel = 0
@@ -178,10 +184,8 @@ end
 
 ----------------------------------------------------------------
 -- [1] Gun Mods — ACS 설정 모듈 변조 (원본 백업/복원 지원)
--- ACS는 장착 시 설정 모듈을 require 해 재사용하므로, 모듈 테이블을
--- 패치하면 이후 장착되는 총기에도 적용된다.
 ----------------------------------------------------------------
-local GUN_KEYS = { "VRecoil", "HRecoil", "MinSpread", "MaxSpread", "FireRate", "Mode", "Ammo" }
+local GUN_KEYS = { "VRecoil", "HRecoil", "MinSpread", "MaxSpread", "FireRate", "Mode", "Ammo", "AmmoVal" }
 local gunOrig = {}
 
 local function collectGunSettings()
@@ -221,7 +225,7 @@ local function patchGuns(field, value)
 			end
 		end
 	end
-	-- 장착 중인 툴에도 즉시 반영 (모듈 캐시가 재생성된 경우 대비)
+	-- 장착 중인 툴에도 즉시 반영
 	local tool = getEquippedTool()
 	local mod = tool and (tool:FindFirstChild("Settings") or tool:FindFirstChildOfClass("ModuleScript"))
 	if mod then
@@ -251,12 +255,74 @@ local function restoreGuns()
 	gunOrig = {}
 end
 
--- 개별 토글이 켜질 때마다 전체 상태를 다시 계산해 적용
+-- 장착 툴의 설정(fireRate 등) 반환
+local function getToolSettings(tool)
+	tool = tool or getEquippedTool()
+	if not tool then return nil end
+	local mod = tool:FindFirstChild("Settings") or tool:FindFirstChildOfClass("ModuleScript")
+	if not mod then return nil end
+	local ok, settings = pcall(require, mod)
+	if ok and type(settings) == "table" then return settings end
+	return nil
+end
+
+-- 서버-안전 발사 주기 계산 (recovered root.47: FireRate/60 초당, 최대 20/s)
+--   반환: interval(초). rps = clamp(FireRate/60, 1, 20)
+local function serverSafeInterval(settings)
+	local fr = tonumber(settings and settings.FireRate) or 600
+	local rps = math.clamp(fr / 60, 1, 20)
+	return 1 / rps
+end
+
 local gunState = { norecoil = false, nospread = false, infammo = false, fullauto = false, firerate = false }
+
+-- Full Auto 전용 루프 (Mode 는 건드리지 않음 → 서버는 Semi/Bolt 유지)
+local fullAutoConn
+local function setFullAuto(on)
+	if fullAutoConn then fullAutoConn:Disconnect(); fullAutoConn = nil end
+	if not on then return end
+	fullAutoConn = RunService.Heartbeat:Connect(function()
+		local tool = getEquippedTool()
+		if not tool or not tool:IsA("Tool") then return end
+		-- Mode 는 원본(Semi/Bolt) 그대로 두고, 클라이언트에서만 반복 활성화
+		local settings = getToolSettings(tool)
+		local interval = serverSafeInterval(settings)
+		if not tool._acsLastFire or (tick() - tool._acsLastFire) >= interval then
+			tool._acsLastFire = tick()
+			pcall(function()
+				tool:Activate() -- 서버에는 정상 세미/볼트 1발로 등록 → 데미지 정상 적용
+			end)
+		end
+	end)
+end
+
+-- Infinite Ammo 전용 루프 (recovered root.89: ammo.Value 지속 고정)
+local infAmmoConn
+local AMMO_VALUE = 600
+local function setInfiniteAmmo(on)
+	if infAmmoConn then infAmmoConn:Disconnect(); infAmmoConn = nil end
+	if not on then return end
+	infAmmoConn = RunService.Heartbeat:Connect(function()
+		local tool = getEquippedTool()
+		if not tool then return end
+		local ammoVal = tool:FindFirstChild("ammo")
+		if ammoVal and ammoVal:IsA("NumberValue") and ammoVal.Value ~= AMMO_VALUE then
+			ammoVal.Value = AMMO_VALUE
+		end
+		-- ACS 설정 모듈의 AmmoVal 도 동기화 (root.88: r2[AmmoVal] = ammo.Value)
+		local settings = getToolSettings(tool)
+		if settings and settings.AmmoVal ~= nil then
+			settings.AmmoVal = AMMO_VALUE
+		end
+	end)
+end
+
 local function applyGunState()
 	if not (gunState.norecoil or gunState.nospread or gunState.infammo
 		or gunState.fullauto or gunState.firerate) then
 		restoreGuns()
+		setFullAuto(false)
+		setInfiniteAmmo(false)
 		return
 	end
 	if gunState.norecoil then
@@ -267,18 +333,12 @@ local function applyGunState()
 		patchGuns("MinSpread", 0)
 		patchGuns("MaxSpread", 0)
 	end
-	if gunState.fullauto then
-		patchGuns("Mode", "Auto")
-	end
 	if gunState.firerate then
 		patchGuns("FireRate", 1200)
 	end
-	if gunState.infammo then
-		-- ACS는 탄약을 NumberValue("ammo")로 관리 → 값 고정
-		local tool = getEquippedTool()
-		local ammoVal = tool and tool:FindFirstChild("ammo")
-		if ammoVal then ammoVal.Value = 600 end -- 실제 스크립트가 쓰는 값
-	end
+	-- Full Auto / Infinite Ammo 는 설정 패치가 아니라 지속 루프로 처리
+	setFullAuto(gunState.fullauto)
+	setInfiniteAmmo(gunState.infammo)
 end
 
 addSectionLabel("== Gun Mods ==")
@@ -297,7 +357,7 @@ addToggle("Infinite Ammo", function(s)
 	syncEnv("gm_infammo", s)
 	applyGunState()
 end)
-addToggle("Full Auto", function(s)
+addToggle("Full Auto (server-safe)", function(s)
 	gunState.fullauto = s
 	syncEnv("gm_fullauto", s)
 	applyGunState()
@@ -342,7 +402,6 @@ addToggle("RPG Instant Hit", function(s)
 						if obj.Name:find("Rocket") and obj:GetAttribute("Owner") == LocalPlayer.Name then
 							local mainPart = obj:FindFirstChild("MainPart") or obj:FindFirstChild("Rocket")
 							if mainPart then
-								-- 가장 가까운 적에게 즉시 전송
 								local best, bestDist
 								for _, player in ipairs(Players:GetPlayers()) do
 									if player ~= LocalPlayer and player.Character
@@ -364,9 +423,12 @@ addToggle("RPG Instant Hit", function(s)
 	end
 end)
 
+-- RPG Aura: 거리 4000 스터드 (recovered root.103/104 의 rocketaura_range 사용)
+local ROCKET_AURA_RANGE = 4000
 local auraRunning = false
-addToggle("Rocket Aura", function(s)
+addToggle("Rocket Aura (4000 studs)", function(s)
 	syncEnv("rocketaura", s)
+	syncEnv("rocketaura_range", ROCKET_AURA_RANGE)
 	auraRunning = s
 	if s then
 		task.spawn(function()
@@ -378,8 +440,11 @@ addToggle("Rocket Aura", function(s)
 						for _, player in ipairs(Players:GetPlayers()) do
 							if player ~= LocalPlayer and player.Character
 								and player.Character:FindFirstChild("HumanoidRootPart") then
+								-- 팀 필터 (recovered: 같은 팀이면 스킵, 팀 없으면 통과)
+								local sameTeam = LocalPlayer.Team and player.Team
+									and (player.Team == LocalPlayer.Team)
 								local tpos = player.Character.HumanoidRootPart.Position
-								if (root.Position - tpos).Magnitude < 4000 then
+								if not sameTeam and (root.Position - tpos).Magnitude <= ROCKET_AURA_RANGE then
 									-- 실제 스크립트 방식: 목표 위에서 아래로 발사
 									fireRocket(tool, tpos + Vector3.new(0, 10, 0), Vector3.new(0, -1, 0), player.Character)
 								end
@@ -411,11 +476,11 @@ addToggle("Rocket Stat Boost", function(s)
 end)
 
 ----------------------------------------------------------------
--- [3] Kill Aura — 근처 플레이어에게 로켓 발사 (직접 구현)
+-- [3] Kill Aura — 근처 플레이어에게 로켓 발사 (거리 8000 스터드)
 ----------------------------------------------------------------
 local killAuraConn
 addSectionLabel("== Rage ==")
-addToggle("Kill Aura (150m)", function(s)
+addToggle("Kill Aura (8000 studs)", function(s)
 	syncEnv("killAuraEnabled", s)
 	if killAuraConn then killAuraConn:Disconnect(); killAuraConn = nil end
 	if s then
@@ -426,8 +491,10 @@ addToggle("Kill Aura (150m)", function(s)
 			for _, player in ipairs(Players:GetPlayers()) do
 				if player ~= LocalPlayer and player.Character
 					and player.Character:FindFirstChild("HumanoidRootPart") then
+					local sameTeam = LocalPlayer.Team and player.Team
+						and (player.Team == LocalPlayer.Team)
 					local hrp = player.Character.HumanoidRootPart
-					if (hrp.Position - root.Position).Magnitude < 8000 then
+					if not sameTeam and (hrp.Position - root.Position).Magnitude <= 8000 then
 						pcall(fireRocket, tool, root.Position, (hrp.Position - root.Position).Unit, player.Character)
 					end
 				end
@@ -517,4 +584,4 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
-print("[ACS Exploit] Panel loaded — verified rocket payload + BSMT getgenv sync")
+print("[ACS Exploit v3] RPG Aura=4000 / Kill Aura=8000 / FullAuto server-safe / InfAmmo loop")
