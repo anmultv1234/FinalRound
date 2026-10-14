@@ -1,61 +1,29 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Camera = workspace.CurrentCamera
 
-print("▶ PC/모바일 통합 완벽 호환 패치 실행 중...")
+print("▶ PC/모바일 컨트롤러 및 물리 강제 해제 패치 실행...")
 
--- 1. 서버에 실제로 존재하는 유효한 기지(Tycoon) 이름을 정확히 탐색 (에러 방지 핵심)
-local realTycoonName = "Loading"
+-- 1. PC 입력 마우스/키보드 포커스 강제 해제 (컨트롤러 활성화)
+UserInputService.ModalEnabled = false
+UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+-- 2. 로블록스 기본 플레이어 컨트롤러(PlayerModule) 강제 활성화 유도
 pcall(function()
-    local tycoonsFolder = workspace:WaitForChild("Tycoon", 3):WaitForChild("Tycoons", 3)
-    for _, tycoon in ipairs(tycoonsFolder:GetChildren()) do
-        if tycoon.Name ~= "Loading" then
-            realTycoonName = tycoon.Name
-            break
+    local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    if playerScripts then
+        local playerModule = playerScripts:FindFirstChild("PlayerModule")
+        if playerModule then
+            require(playerModule):GetControls():Enable()
         end
     end
 end)
 
--- 2. ACS_CLIENT가 에러 없이 인식할 수 있는 정교한 가짜 팀 객체 생성
-local fakeTeam = setmetatable({
-    Name = realTycoonName
-}, {
-    __index = function(t, k)
-        if k == "Name" then
-            return realTycoonName
-        end
-        return rawget(t, k)
-    end
-})
-
--- 3. 메타메소드 후킹으로 LocalPlayer.Team 완벽 속이기
-local mt = getrawmetatable(LocalPlayer)
-if mt then
-    setreadonly(mt, false)
-    local oldIndex = mt.__index
-    mt.__index = function(self, key)
-        if self == LocalPlayer and key == "Team" then
-            return fakeTeam
-        end
-        if type(oldIndex) == "function" then
-            return oldIndex(self, key)
-        elseif type(oldIndex) == "table" then
-            return oldIndex[key]
-        end
-        return nil
-    end
-    setreadonly(mt, true)
-    print("▶ 팀 스푸핑 성공, 인식된 기지/팀:", realTycoonName)
-end
-
--- 4. PC 입력 포커스 및 마우스 잠금 해제
-UserInputService.ModalEnabled = false
-UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-
--- 5. 잔존 로비 GUI 완전 제거 함수
+-- 3. 잔존 로비 GUI 완전 제거
 local function hideLobbyUI()
     for _, gui in ipairs(PlayerGui:GetDescendants()) do
         if gui:IsA("ScreenGui") or gui:IsA("Frame") or gui:IsA("CanvasGroup") then
@@ -72,21 +40,26 @@ local function hideLobbyUI()
     end
 end
 
--- 6. 메인 루프 (앵커 해제, 카메라 Subject 강제 고정, GUI 숨김)
+-- 4. 메인 루프 (캐릭터 앵커 해제, 물리 속도 초기화, 카메라 및 입력 제어 강제 고정)
 RunService.RenderStepped:Connect(function()
     local character = LocalPlayer.Character
     if not character then return end
     
-    -- 캐릭터 앵커(고정) 해제
     local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if rootPart and rootPart.Anchored then
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if not rootPart or not humanoid or humanoid.Health <= 0 then return end
+
+    -- [핵심] 캐릭터 고정(앵커)을 매 프레임 강제로 풀어버림
+    if rootPart.Anchored then
         rootPart.Anchored = false
     end
-    
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return end
 
-    -- PC와 모바일 모두 카메라가 캐릭터를 정확히 바라보도록 강제 동기화
+    -- PC에서 키보드 입력(WASD)이 캐릭터 이동으로 직결되도록 휴마노이드 상태 강제 갱신
+    humanoid.PlatformStand = false
+    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+    -- 카메라가 캐릭터를 정확히 잡도록 설정
     if Camera.CameraSubject ~= humanoid or Camera.CameraType ~= Enum.CameraType.Custom then
         Camera.CameraType = Enum.CameraType.Custom
         Camera.CameraSubject = humanoid
@@ -96,4 +69,4 @@ RunService.RenderStepped:Connect(function()
     hideLobbyUI()
 end)
 
-print("▶ 패치 완료! PC와 모바일 모두 정상적으로 동작합니다.")
+print("▶ 패치 완료! PC에서도 모바일처럼 캐릭터가 즉시 분리되어 이동할 수 있습니다.")
