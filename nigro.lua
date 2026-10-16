@@ -724,9 +724,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/%E2%80%8BPasteWareUIlib.lua"))()
-local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/%E2%80%8Bmanage2.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/%E2%80%8Bmanager.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/PasteWareUIlib.lua"))()
+local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/manage2.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/anmultv1234/FinalRoundUI-Lib/refs/heads/main/manager.lua"))()
 local Window = Library:CreateWindow({
     Title = 'anmultv1234',
     Center = true,
