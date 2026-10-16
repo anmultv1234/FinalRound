@@ -1,3 +1,48 @@
+--[[ ============================================================
+     [호환성 패치 / Compatibility shim]
+     원본 nigro.lua 앞에 추가하는 부분입니다.
+
+     원인 요약:
+       스크립트 727번째 줄에서 UI 라이브러리를 불러옵니다.
+         Library = loadstring(game:HttpGet(".../PasteWareUIlib.lua"))()
+       그 라이브러리의 "1번째 줄"이 바로
+         local Players = cloneref(game:GetService("Players"))
+       이고, 실행기에 cloneref 가 없으면 여기서
+         :1: attempt to call a nil value
+       가 발생합니다. (라이브러리 내부 1번 줄 오류라서 이름 없는 청크 :1: 로 표시됨)
+
+     이 패치는 그런 함수가 없을 때 동일 동작으로 대체해 넣어 줍니다.
+     ============================================================ ]]
+do
+    -- 1) getgenv 가 없는 극단적인 경우 대비 (원본 1번 줄이 getgenv() 를 씀)
+    if type(getgenv) ~= "function" then
+        _G.getgenv = function()
+            return _G
+        end
+    end
+
+    local env = getgenv()
+
+    -- 2) cloneref : 그대로 반환하는 동일 동작으로 대체 (Fluent 계열 기본 폴백과 같음)
+    if type(env.cloneref) ~= "function" then
+        env.cloneref = function(v)
+            return v
+        end
+    end
+
+    -- 3) identifyexecutor : ExLib 이 직접 호출하므로 없으면 문자열 반환으로 대체
+    if type(env.identifyexecutor) ~= "function" then
+        env.identifyexecutor = function()
+            return "Unknown"
+        end
+    end
+
+    -- 4) protectgui : 원본도 자체적으로 대체하지만 순서 문제 방지를 위해 미리 채움
+    if type(env.protectgui) ~= "function" then
+        env.protectgui = function() end
+    end
+end
+--[[ ===================== [호환성 패치 끝] ===================== ]]
 getgenv().bypass_adonis = true
 
 if not game:IsLoaded() then
@@ -1513,7 +1558,7 @@ local worldbox = VisualsTab:AddRightGroupbox("World")
 
 local lighting = Services.Lighting
 ScriptState.lockedTime, ScriptState.fovValue, ScriptState.nebulaEnabled = 12, 70, false
-local originalAmbient, originalOutdoorAmbient = lighting.Ambient, originalOutdoorAmbient = lighting.OutdoorAmbient
+local originalAmbient, originalOutdoorAmbient = lighting.Ambient, lighting.OutdoorAmbient
 local originalFogStart, originalFogEnd, originalFogColor = lighting.FogStart, lighting.FogEnd, lighting.FogColor
 local nebulaThemeColor = Color3.fromRGB(173, 216, 230)
 
