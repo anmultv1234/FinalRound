@@ -750,8 +750,6 @@ SaveManager:SetLibrary(Library)
 ThemeManager:ApplyToTab(settingsTab)
 SaveManager:BuildConfigSection(settingsTab)
 
-local lastAimLockKeyState = false
-local lastAimLockKeyMode = ScriptState.aimLockKeyMode
 
 aimbox:AddToggle("aimLockKeyToggle", {
     Text = "aimlock",
@@ -938,6 +936,266 @@ velbox:AddSlider("ReverseResolveIntensity", {
         ScriptState.reverseResolveIntensity = value
     end
 })
+
+do
+local MovementBox = GeneralTab:AddRightGroupbox("Movement")
+
+ScriptState.flySpeed = 50
+ScriptState.speedValue = 16
+
+local function movementTargets()
+    local player = Players.LocalPlayer
+    if not player then
+        return nil
+    end
+    local character = player.Character
+    if not character then
+        return nil
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
+        return nil
+    end
+    local root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+    if not root then
+        return nil
+    end
+    return character, humanoid, root
+end
+
+local flyVelocity = nil
+local flyGyro = nil
+local flyRenderConn = nil
+local speedRenderConn = nil
+
+local stopFly
+local startFly
+local stopSpeed
+local startSpeed
+
+stopFly = function(syncToggle)
+    if flyRenderConn then
+        flyRenderConn:Disconnect()
+        flyRenderConn = nil
+    end
+    if flyVelocity then
+        pcall(function() flyVelocity:Destroy() end)
+        flyVelocity = nil
+    end
+    if flyGyro then
+        pcall(function() flyGyro:Destroy() end)
+        flyGyro = nil
+    end
+    local _, humanoid = movementTargets()
+    if humanoid then
+        pcall(function() humanoid.PlatformStand = false end)
+    end
+    ScriptState.isFlyActive = false
+    if syncToggle and Toggles.flyEnabled then
+        pcall(function() Toggles.flyEnabled:SetValue(false) end)
+    end
+end
+
+startFly = function()
+    local _, humanoid, root = movementTargets()
+    if not humanoid or not root then
+        return false
+    end
+    if ScriptState.isFlyActive and flyVelocity and flyGyro then
+        return true
+    end
+
+    pcall(function() humanoid.PlatformStand = true end)
+
+    flyVelocity = Instance.new("BodyVelocity")
+    flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    flyVelocity.Velocity = Vector3.zero
+    flyVelocity.Parent = root
+
+    flyGyro = Instance.new("BodyGyro")
+    flyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    flyGyro.P = 90000
+    flyGyro.D = 5000
+    flyGyro.CFrame = root.CFrame
+    flyGyro.Parent = root
+
+    ScriptState.isFlyActive = true
+
+    flyRenderConn = RenderStepped:Connect(function()
+        local _, hum, rt = movementTargets()
+        if not hum or not rt or not flyVelocity or not flyGyro then
+            stopFly(true)
+            return
+        end
+        local camera = workspace.CurrentCamera
+        if not camera then
+            return
+        end
+
+        local direction = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            direction = direction + camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            direction = direction - camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            direction = direction - camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            direction = direction + camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            direction = direction + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            direction = direction - Vector3.new(0, 1, 0)
+        end
+
+        local moveDirection = hum.MoveDirection
+        if moveDirection.Magnitude > 0 then
+            direction = direction + moveDirection
+        end
+
+        local speed = ScriptState.flySpeed or 50
+        if direction.Magnitude > 0 then
+            flyVelocity.Velocity = direction.Unit * speed
+        else
+            flyVelocity.Velocity = Vector3.zero
+        end
+        flyGyro.CFrame = camera.CFrame
+    end)
+
+    return true
+end
+
+stopSpeed = function(syncToggle)
+    if speedRenderConn then
+        speedRenderConn:Disconnect()
+        speedRenderConn = nil
+    end
+    local _, humanoid = movementTargets()
+    if humanoid then
+        pcall(function() humanoid.WalkSpeed = 16 end)
+    end
+    ScriptState.isSpeedActive = false
+    if syncToggle and Toggles.speedEnabled then
+        pcall(function() Toggles.speedEnabled:SetValue(false) end)
+    end
+end
+
+startSpeed = function()
+    local _, humanoid = movementTargets()
+    if not humanoid then
+        return false
+    end
+    if ScriptState.isSpeedActive then
+        return true
+    end
+
+    ScriptState.isSpeedActive = true
+
+    speedRenderConn = RenderStepped:Connect(function()
+        local _, hum = movementTargets()
+        if not hum then
+            stopSpeed(true)
+            return
+        end
+        local target = ScriptState.speedValue or 16
+        if hum.WalkSpeed ~= target then
+            hum.WalkSpeed = target
+        end
+    end)
+
+    return true
+end
+
+MovementBox:AddToggle("flyEnabled", {
+    Text = "Fly",
+    Default = false,
+    Tooltip = "Enable noclip flight with camera-relative movement",
+    Callback = function(value)
+        if value then
+            if not startFly() then
+                stopFly(true)
+            end
+        else
+            stopFly(false)
+        end
+    end
+}):AddKeyPicker("flyToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Fly Toggle Key",
+    Tooltip = "Keybind for Fly",
+    Callback = function(value)
+        if value then
+            if not startFly() then
+                stopFly(true)
+            end
+        else
+            stopFly(false)
+        end
+    end
+})
+
+MovementBox:AddSlider("flySpeed", {
+    Text = "Fly Speed",
+    Default = 50,
+    Min = 5,
+    Max = 500,
+    Rounding = 0,
+    Compact = false,
+    Tooltip = "Adjust the flight speed",
+    Callback = function(value)
+        ScriptState.flySpeed = value
+    end
+})
+
+MovementBox:AddToggle("speedEnabled", {
+    Text = "Speed",
+    Default = false,
+    Tooltip = "Enable the walk speed modifier",
+    Callback = function(value)
+        if value then
+            if not startSpeed() then
+                stopSpeed(true)
+            end
+        else
+            stopSpeed(false)
+        end
+    end
+}):AddKeyPicker("speedToggleKey", {
+    Default = "None",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Speed Toggle Key",
+    Tooltip = "Keybind for Speed",
+    Callback = function(value)
+        if value then
+            if not startSpeed() then
+                stopSpeed(true)
+            end
+        else
+            stopSpeed(false)
+        end
+    end
+})
+
+MovementBox:AddSlider("speedValue", {
+    Text = "Speed",
+    Default = 16,
+    Min = 16,
+    Max = 500,
+    Rounding = 0,
+    Compact = false,
+    Tooltip = "Adjust the walk speed",
+    Callback = function(value)
+        ScriptState.speedValue = value
+    end
+})
+end
 
 local hookCtl = { namecall = nil, oldNamecall = nil, newindex = nil, oldNewindex = nil, suspended = false }
 local function rocketEnvActive()
